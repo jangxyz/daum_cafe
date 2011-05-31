@@ -8,31 +8,33 @@ from daum_club_album import *
 
 class Mock:
     def __init__(self, *args, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
+        self.__args = args
+        self.__kwargs = kwargs
+        for k,v in kwargs.iteritems():
+            setattr(self, k, v)
 
 class LoginTestCase(unittest.TestCase):
     def setUp(self):
         self.backups = {
-            'urllib2': urllib2
+            'urllib2.urlopen': urllib2.urlopen
         }
 
     def tearDown(self):
-        urllib2 = self.backups['urllib2']
+        urllib2.urlopen = self.backups['urllib2.urlopen']
 
     def test_login(self):
-        readable = Mock()
-        readable.read = lambda: open('login_page.html').read()
-        urllib2.urlopen = lambda *args, **kwargs: readable
+        urllib2.urlopen = lambda *args, **kwargs: Mock(
+            read = lambda: open('login_page.html').read()
+        )
 
         # 
         if is_logged_in() is not True:
             raise AssertionError, "is_logged_in() should return True, but didn't"
 
     def test_logout(self):
-        readable = Mock()
-        readable.read = lambda: open('logout_page.html').read()
-        urllib2.urlopen = lambda *args, **kwargs: readable
+        urllib2.urlopen = lambda *args, **kwargs: Mock(
+            read = lambda: open('logout_page.html').read()
+        )
         
         # 
         if is_logged_in() is not False:
