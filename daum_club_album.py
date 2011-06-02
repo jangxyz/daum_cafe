@@ -3,7 +3,7 @@
 
 import sys
 import re
-import urllib2
+import urllib, urllib2
 import cookielib
 import getpass
 
@@ -51,7 +51,7 @@ def is_logged_in(site=None):
     return
         
 
-def authorize():
+def authorize(username=None, password=None):
     '''
     <form name="loginform" id="loginForm" method="post" action="https://logins.daum.net/accounts/login.do">
         <input type="hidden" name="url" id="url" value="http://cafe.daum.net" />
@@ -64,8 +64,12 @@ def authorize():
      </form>
     '''
     global opener
-    username = raw_input('Username: ')
-    password = getpass.getpass()
+
+    if username is None:
+        username = raw_input('Username: ')
+    if password is None:
+        password = getpass.getpass()
+
     login_data = {
         "url": "http://cafe.daum.net",
         "securityLevel": "2",
