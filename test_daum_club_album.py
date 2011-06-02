@@ -41,6 +41,47 @@ class LoginTestCase(unittest.TestCase):
             raise AssertionError, "is_logged_in() should return True, but didn't"
 
 
+class AuthorizeTestCase(unittest.TestCase):
+    def setUp(self):
+        self.backups = {
+            'urllib2.urlopen': urllib2.urlopen,
+            'cookielib': cookielib,
+        }
+
+    def tearDown(self):
+        urllib2.urlopen = self.backups['urllib2.urlopen']
+        cookielib = self.backups['cookielib']
+
+    def test_passing_correct_parameters(self):
+        # setup
+        def _counter(self):
+            self.cookiejar_count += 1
+        cookielib = Mock(
+            cookiejar_count = 0,
+            CookieJar = _counter
+        )
+
+        # test
+        authorize()
+
+        # validate
+        assert cookelib.count == 1, "cookielib.CookieJar() must be called"
+
+
+
 if __name__ == '__main__':
     unittest.main()
+
+
+class M:
+    def __init__(self):
+        self.a = 1
+
+    def ins_m(self):
+        pass
+
+
+def test(self):
+    print dir(self)
+
 
