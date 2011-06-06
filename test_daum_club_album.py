@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf8 -*-
 
 import unittest
 import types
@@ -15,18 +16,17 @@ class Mock:
                 _instance = self
                 _class = self.__class__
                 v = types.MethodType(v.function, _instance, _class)
-            
             #
             setattr(self, k, v)
-
 
 class ins_m:
     ''' set given function as a instance method, to a Mock class '''
     def __init__(self, function):
         self.function = function
-    
 
-class LoginTestCase(unittest.TestCase):
+# --
+
+class BackupUrlOpen:
     def setUp(self):
         self.backups = {
             'urlopen': daum_club_album.urlopen
@@ -34,10 +34,18 @@ class LoginTestCase(unittest.TestCase):
 
     def tearDown(self):
         daum_club_album.urlopen = self.backups['urlopen']
+    
+
+class LoginTestCase(unittest.TestCase, BackupUrlOpen):
+    def setUp(self):
+        super(LoginTestCase, self).setUp()
+
+    def tearDown(self):
+        super(LoginTestCase, self).tearDown()
 
     def test_login(self):
         daum_club_album.urlopen = lambda *args, **kwargs: \
-            open('login_page.html').read()
+            open('html/login_page.html').read()
 
         # 
         if is_logged_in() is not True:
@@ -45,7 +53,7 @@ class LoginTestCase(unittest.TestCase):
 
     def test_logout(self):
         daum_club_album.urlopen = lambda *args, **kwargs: \
-            open('logout_page.html').read()
+            open('html/logout_page.html').read()
         
         # 
         if is_logged_in() is not False:
@@ -113,6 +121,32 @@ class AuthorizeTestCase(unittest.TestCase):
 
         # test
         authorize(username, password)
+
+
+class ListCafeFromFavoritesTestCase(unittest.TestCase, BackupUrlOpen):
+    def setUp(self):
+        super(ListCafeFromFavoritesTestCase, self).setUp()
+        #
+        daum_club_album.urlopen = lambda *args, **kwargs: \
+            open('html/login_page.html').read()
+
+    def tearDown(self):
+        super(ListCafeFromFavoritesTestCase, self).tearDown()
+
+    def test_count_cafes_extracted(self):
+        result = list_cafe_from_favorites()
+
+        # validate
+        assert len(result) == 1
+        
+    def test_cafe_info_tuple(self):
+        result = list_cafe_from_favorites()
+
+        # validate
+        cafe_info = result[0]
+        assert isinstance(cafe_info, tuple)
+        assert cafe_info[0] == "스포츠클라이밍 실내암벽 더탑"
+        assert cafe_info[1] == "http://cafe.daum.net/loveclimb?t__nil_cafemy=item"
 
 
 if __name__ == '__main__':

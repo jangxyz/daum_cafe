@@ -14,12 +14,8 @@ import getpass
 
 """
 __version__ = 0.1
-LOGIN_TEST_URL = 'http://cafe.daum.net/'
-LOGIN_MARK1 = re.compile('''<h3>[^<]*자주가는 카페[^<]*</h3>''')
-LOGIN_MARK2 = re.compile('''<div [^>]*id="loginBox"[^>]*>''')
-LOGOUT_MARK1 = re.compile('''<div [^>]*id="needLogin"[^>]*>''')
-LOGOUT_MARK2 = re.compile('''<form name="loginform" id="loginForm" method="post" action="https://logins.daum.net/accounts/login.do">''')
 
+CAFE_START_PAGE = 'http://cafe.daum.net/'
 LOGIN_URL = "https://logins.daum.net/accounts/login.do"
 
 
@@ -34,12 +30,18 @@ def urlopen(url):
 
 def is_logged_in(site=None):
     if site is None:
+        LOGIN_TEST_URL = CAFE_START_PAGE
         try:
             site = urlopen(LOGIN_TEST_URL)
         except urllib2.URLError, e:
             sys.stderr.write(str(e))
             sys.stderr.write("\n")
             return
+
+    LOGIN_MARK1  = re.compile('''<h3>[^<]*자주가는 카페[^<]*</h3>''')
+    LOGIN_MARK2  = re.compile('''<div [^>]*id="loginBox"[^>]*>''')
+    LOGOUT_MARK1 = re.compile('''<div [^>]*id="needLogin"[^>]*>''')
+    LOGOUT_MARK2 = re.compile('''<form name="loginform" id="loginForm" method="post" action="https://logins.daum.net/accounts/login.do">''')
     # login!
     if LOGIN_MARK1.search(site) and LOGIN_MARK2.search(site):
         return True
@@ -82,6 +84,59 @@ def authorize(username=None, password=None):
     resp = opener.open(LOGIN_URL, data=urllib.urlencode(login_data))
     del password, login_data
     return opener
+
+
+def list_cafe_from_favorites(text=None):
+    '''
+    return list of tuple (cafe name, cafe url)
+
+    assumes content of http://cafe.daum.net/ page in text
+    start, finish: 
+        <div id="favorites" class="content">
+            ...
+        <div id="activities" class="content">
+    '''
+    cafe_list = []
+
+    if text is None:
+        text = urlopen(CAFE_START_PAGE)
+
+    # extract region
+    FAVORITES_MARK = re.compile('''
+        <div [^>]*id="favorites"[^>]*>      # start mark
+        (.*)
+        <div [^>]*id="activities"[^>]*>     # end mark
+    ''', re.S | re.X)
+    match = FAVORITES_MARK.search(text)
+    if not match:
+        raise Exception("parse error")
+
+    text = match.group(1).strip()
+    if not ('<tbody>' in text and '</tbody>' in text):
+        raise Exception("parse error")
+
+    text = text[text.index('<tbody>') : text.index('</tbody>')].strip()
+
+    # split table
+    LINK_PATTERN = re.compile('''
+        <a [^>]*href="([^"]*)"[^>]*>    # anchor start
+        ([^<]*)                         # title
+        </a>                            # anchor end
+    ''', re.S | re.X)
+    for tr in text.split("<tr>")[1:]:
+        match = LINK_PATTERN.search(tr)
+        if match:
+            cafe_list.append((match.group(2).strip(), match.group(1).strip()))
+
+    return cafe_list
+        
+
+
+def list_cafe_from_all(self):
+    pass
+
+def list_album_bbs(self):
+    pass
 
 
 
