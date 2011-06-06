@@ -3,9 +3,11 @@
 
 import sys
 import re
+import htmlentitydefs
 import urllib, urllib2
 import cookielib
 import getpass
+from collections import namedtuple
 
 """
     다음 카페 클럽앨범 이미지 다운로더
@@ -149,9 +151,9 @@ def list_album_board(url, category=None):
     board_info_list = parse_board_info_from_sidebar(sidebar_url)
 
     if category:
-        return [t for t in board_info_list where t[0].strip() == category.strip()]
-    else:
-        return board_info_list
+        return [t for t in board_info_list if t[0].strip() == category.strip()]
+
+    return board_info_list
 
 def parse_cafe_inner_url_from_official(url):
     ''' parse cafe official url and return real url '''
@@ -193,8 +195,8 @@ def parse_sidebar_menu_url_from_cafe_main(url):
         raise Exception("parse error")
 
     path = match.group(1)
-    url = get_domain(url) + "/" + path.lstrip('/')
-    return url
+    sidebar_url  = get_domain(url, path)
+    return sidebar_url
 
 
 def parse_board_info_from_sidebar(url):
@@ -237,23 +239,145 @@ def parse_board_info_from_sidebar(url):
 
     text = urlopen(url)
     result = BOARD_PATTERN.findall(text)
-    return [(t[0].strip(), t[1], t[2], unescape(t[3]), t[4]) for t in result]
+    return [(t[0].strip(), t[1], unescape(t[2]), unescape(t[3]), t[4]) 
+        for t in result]
 
+
+def parse_article_album_list(url):
+    ''' parse article album list and result list of article information as a tuple:
+        (article_num, title, post_date, author, path)
+    '''
+    _type = namedtuple('BriefArticleInfo', 'article_num title post_date author path'.split())
+
+    ARTICLE_LIST_START_MARK = '''<div class="albumListBox">'''
+    ARTICLE_LIST_END_MARK   = '''<!-- end albumListBox -->'''
+
+    text = urlopen(url)
+    if not(ARTICLE_LIST_START_MARK in text and ARTICLE_LIST_END_MARK in text):
+        raise Exception("parse error")
+    text = text[ text.index(ARTICLE_LIST_START_MARK): text.index(ARTICLE_LIST_END_MARK) ]
+
+    ARTICLE_PATTERN = re.compile(u'''
+        <li[^>]*>\s*
+            <dl>
+            .*?
+            <dd[ ]class="subject">\s*
+                <a[ ][^>]*href="(?P<path>[^"]*)"[^>]*>\s*       # path
+                (?P<title>[^<]*)\s*                             # title
+                </a>\s*
+                .*?
+            </dd>\s*
+            <dd[ ]class="txt_sub[ ]p11">번호\s*
+            <span[ ]class="num">(?P<article_num>[0-9]+)</span>  # article_num
+            .*?
+            <span[ ]class="num">(?P<post_date>[^<]*)</span>\s*  # post_date
+            </dd>
+            .*?
+            <dd[ ]class="txt_sub[ ]nick[ ]p11">\s*
+                <a[^>]*>(?P<author>[^<]*)</a>\s*                # author
+            </dd>
+            .*?
+            </dl>
+            .*?
+        </li>
+    ''', re.X | re.S)
+
+    result = []
+    for article in text.split('</li>')[:-1]:
+        match = ARTICLE_PATTERN.search(article + '</li>')
+        if match:
+            # (article_num, title, post_date, author, path)
+            d = match.groupdict()
+            t = (
+                int(d['article_num']), 
+                d['title'].strip(), 
+                d['post_date'], 
+                d['author'].strip(), 
+                d['path']
+            )
+            result.append(_type(*t))
+
+    return result
+
+
+def parse_article_album_view(url):
+    ''' parse article album view and result list of article information as a tuple:
+        (article_num, title, post_date, author, path, image_list)
+    '''
+    _type = namedtuple('FullArticleInfo', 'title post_date author url image_list'.split())
+
+    # strip article info
+    ARTICLE_PATTERN = re.compile('''
+        <div[ ]id="primaryContent">
+            .*
+            <div[ ]class="article_subject[ ]line_sub">\s*
+                <div[ ]class="subject">
+                    .*
+                    <span[ ]class="b">(?P<title>[^<]*)</span>\s*            # title
+                    .*
+                </div>\s*
+            </div><!--[ ]end[ ]article_subject[ ]-->\s*
+            .*
+            <div[ ]class="article_writer">\s*
+                <a[^>]*>(?P<author>[^<]*)</a>                               # author
+                .*
+                <span[ ]class="p11[ ]ls0">(?P<post_date>[^<]*)</span>\s*    # post_date
+                <span[ ]class="txt_sub[ ]url">\s*
+                    <a[ ][^>]*href="(?P<url>[^"]*)"[^>]*>                   # url
+                    .*
+                    </a>
+                    .*
+                </span>\s*
+            </div><!--[ ]end[ ]article_writer[ ]-->
+            .*
+        </div>
+    ''', re.X | re.S)
+
+    text = urlopen(url)
+    match = ARTICLE_PATTERN.search(text)
+    if not match:
+        raise Exception("parse error")
+    article_info = match.groupdict()
+
+    # strip image lists from content
+    CONTENT_START_MARK = '''<xmp id="template_xmp" name="template_xmp" style="display:none;">'''
+    CONTENT_END_MARK = '''</xmp>'''
+    if not (CONTENT_START_MARK in text and CONTENT_END_MARK in text):
+        raise Exception("parse error")
+    text = text[ text.index(CONTENT_START_MARK): text.index(CONTENT_END_MARK) ]
+
+    IMAGE_SRC_PATTERN = re.compile('''<img [^>]*src="([^"]*)"[^>]*/>''')
+    image_list = IMAGE_SRC_PATTERN.findall(text)
+
+    # 
+    d = article_info
+    return _type(
+        d['title'].strip(), 
+        d['post_date'], 
+        d['author'].strip(), 
+        d['url'],
+        image_list
+    )
             
 
-def get_domain(url):
+def get_domain(url, path=None):
     '''
         urlparse:
             <scheme>://<netloc>/<path>;<params>?<query>#<fragment>
     '''
     parse_result = urllib2.urlparse.urlparse(url)
     domain = '''%(scheme)s://%(netloc)s''' % parse_result._asdict()
-    return domain.rstrip('/')
+    domain = domain.rstrip('/')
+
+    # paste path if any
+    if path:
+        return domain + "/" + path.lstrip('/')
+
+    return domain
 
 
 def unescape(text):
     ''' from http://effbot.org/zone/re-sub.htm#unescape-html '''
-    import re, htmlentitydefs
     def fixup(m):
         text = m.group(0)
         if text[:2] == "&#":
@@ -273,7 +397,6 @@ def unescape(text):
                 pass
         return text # leave as is
     return re.sub("&#?\w+;", fixup, text)
-
 
 
 
