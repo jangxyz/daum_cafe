@@ -46,7 +46,7 @@ class LoginTestCase(unittest.TestCase, BackupUrlOpen):
 
     def test_login(self):
         daum_club_album.urlopen = lambda *args, **kwargs: \
-            open('html/login_page.html').read()
+            codecs.open('html/login_page.html', encoding='utf8').read()
 
         # 
         if is_logged_in() is not True:
@@ -54,7 +54,7 @@ class LoginTestCase(unittest.TestCase, BackupUrlOpen):
 
     def test_logout(self):
         daum_club_album.urlopen = lambda *args, **kwargs: \
-            open('html/logout_page.html').read()
+            codecs.open('html/logout_page.html', encoding='utf8').read()
         
         # 
         if is_logged_in() is not False:

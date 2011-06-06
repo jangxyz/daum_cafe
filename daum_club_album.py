@@ -2,10 +2,13 @@
 # -*- coding: utf8 -*-
 
 import sys
+import os
 import re
+
 import htmlentitydefs
 import urllib, urllib2
 import cookielib
+
 import getpass
 from collections import namedtuple
 
@@ -23,32 +26,56 @@ LOGIN_URL = "https://logins.daum.net/accounts/login.do"
 
 opener = None
 def urlopen(url):
-    if opener is not None:
-        site = opener.open(url)
-    else:
-        site = urllib.urlopen(url)
-    return site.read()
+    site = _open_site(url)
+    text = site.read()
+    encoding = get_encoding_from_header(site.headers)
+    return text.decode(encoding)
 
+def _open_site(url):
+    if opener is not None:  site = opener.open(url)
+    else:                   site = urllib.urlopen(url)
+    return site
 
-def is_logged_in(site=None):
-    if site is None:
+def get_encoding_from_header(header=None, url=None):
+    if header is None:
+        site = _open_site(url)
+        header = site.headers
+    ct = header.dict['content-type'].strip()
+    param = ct.split(';', 1)[1].strip()
+    encoding = param.partition('charset=')[2]
+    return encoding
+
+def get_filename_from_header(header=None, url=None):
+    if header is None:
+        site = _open_site(url)
+        header = site.headers
+    try:
+        cd = header.dict['content-disposition'].strip()
+        param = cd.split(';', 1)[1].strip()
+        filename = param.partition('filename=')[2].strip('"')
+        return filename
+    except:
+        raise Exception("parse error")
+
+def is_logged_in(text=None):
+    if text is None:
         LOGIN_TEST_URL = CAFE_START_PAGE
         try:
-            site = urlopen(LOGIN_TEST_URL)
+            text = urlopen(LOGIN_TEST_URL)
         except urllib2.URLError, e:
             sys.stderr.write(str(e))
             sys.stderr.write("\n")
             return
 
-    LOGIN_MARK1  = re.compile('''<h3>[^<]*자주가는 카페[^<]*</h3>''')
-    LOGIN_MARK2  = re.compile('''<div [^>]*id="loginBox"[^>]*>''')
-    LOGOUT_MARK1 = re.compile('''<div [^>]*id="needLogin"[^>]*>''')
-    LOGOUT_MARK2 = re.compile('''<form name="loginform" id="loginForm" method="post" action="https://logins.daum.net/accounts/login.do">''')
+    LOGIN_MARK1  = re.compile(u'''<h3>[^<]*자주가는 카페[^<]*</h3>''')
+    LOGIN_MARK2  = re.compile(u'''<div [^>]*id="loginBox"[^>]*>''')
+    LOGOUT_MARK1 = re.compile(u'''<div [^>]*id="needLogin"[^>]*>''')
+    LOGOUT_MARK2 = re.compile(u'''<form name="loginform" id="loginForm" method="post" action="https://logins.daum.net/accounts/login.do">''')
     # login!
-    if LOGIN_MARK1.search(site) and LOGIN_MARK2.search(site):
+    if LOGIN_MARK1.search(text) and LOGIN_MARK2.search(text):
         return True
     # logout!
-    if LOGOUT_MARK1.search(site) and LOGOUT_MARK2.search(site):
+    if LOGOUT_MARK1.search(text) and LOGOUT_MARK2.search(text):
         return False
     # heh?
     sys.stderr.write("obscure state..")
@@ -104,7 +131,7 @@ def list_cafe_from_favorites(text=None):
         text = urlopen(CAFE_START_PAGE)
 
     # extract region
-    FAVORITES_MARK = re.compile('''
+    FAVORITES_MARK = re.compile(u'''
         # get content between div#favorites and div#activities
         <div [^>]*id="favorites"[^>]*>      # start mark
         (.*)
@@ -121,7 +148,7 @@ def list_cafe_from_favorites(text=None):
     text = text[text.index('<tbody>') : text.index('</tbody>')].strip()
 
     # split table
-    LINK_PATTERN = re.compile('''
+    LINK_PATTERN = re.compile(u'''
         # get src and text node below A tag
         <a [^>]*href="([^"]*)"[^>]*>    # anchor start
         ([^<]*)                         # title
@@ -157,7 +184,7 @@ def list_album_board(url, category=None):
 
 def parse_cafe_inner_url_from_official(url):
     ''' parse cafe official url and return real url '''
-    CAFE_HOME_PATTERN = re.compile('''
+    CAFE_HOME_PATTERN = re.compile(u'''
         # get src of frame#down
         <frame [^>]*
             (
@@ -178,7 +205,7 @@ def parse_cafe_inner_url_from_official(url):
 
 def parse_sidebar_menu_url_from_cafe_main(url):
     ''' parse cafe main source and return url for cafe sidebar menu '''
-    CAFE_SIDEBAR_PATTERN = re.compile('''
+    CAFE_SIDEBAR_PATTERN = re.compile(u'''
         # get src of tag iframe#leftmenu
         <iframe 
             [^>]*
@@ -212,7 +239,7 @@ def parse_board_info_from_sidebar(url):
 		    <li class="icon_phone "><a id="fldlink__album_624" href="/_c21_/album_list?grpid=ccJT&amp;fldid=_album" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#53364;&#47101;&#50536;&#48276;">클럽앨범</a></li>
 		    <li class="icon_memo "><a id="fldlink__memo_525" href="/_c21_/memo_list?grpid=ccJT&amp;fldid=_memo" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#51068;&#49345;&#51032; &#49692;&#44036;&#49692;&#44036; &#46496;&#50724;&#47476;&#45716; &#51105;&#45392;&#51060;&#45208;,&#44036;&#45800;&#54620; &#47700;&#49464;&#51648;&#47484; &#51201;&#50612;&#48372;&#49464;&#50836;!!">한 줄 메모장</a><img src="http://i1.daumcdn.net/cafeimg/cf_img2/img_blank2.gif" width="10" height="9" alt="new" class="icon_new" /></li> 
     '''
-    BOARD_PATTERN = re.compile('''
+    BOARD_PATTERN = re.compile(u'''
         <li [^>]*                               # LI
             class="(?P<category>icon_[^"]*)\s*" # class attribute
         >
@@ -300,14 +327,20 @@ def parse_article_album_list(url):
     return result
 
 
+
 def parse_article_album_view(url):
     ''' parse article album view and result list of article information as a tuple:
-        (article_num, title, post_date, author, path, image_list)
+        (title, post_date, author, url, image_list)
     '''
     _type = namedtuple('FullArticleInfo', 'title post_date author url image_list'.split())
 
+    # inner url
+    parse_result = urllib2.urlparse.urlparse(url)
+    if parse_result.netloc == 'cafe.daum.net':
+        url = parse_cafe_inner_url_from_official(url)
+
     # strip article info
-    ARTICLE_PATTERN = re.compile('''
+    ARTICLE_PATTERN = re.compile(u'''
         <div[ ]id="primaryContent">
             .*
             <div[ ]class="article_subject[ ]line_sub">\s*
@@ -346,7 +379,7 @@ def parse_article_album_view(url):
         raise Exception("parse error")
     text = text[ text.index(CONTENT_START_MARK): text.index(CONTENT_END_MARK) ]
 
-    IMAGE_SRC_PATTERN = re.compile('''<img [^>]*src="([^"]*)"[^>]*/>''')
+    IMAGE_SRC_PATTERN = re.compile(u'''<img [^>]*src="([^"]*)"[^>]*/>''')
     image_list = IMAGE_SRC_PATTERN.findall(text)
 
     # 
@@ -358,7 +391,22 @@ def parse_article_album_view(url):
         d['url'],
         image_list
     )
-            
+
+
+def download_image(url, dest=None):
+    # download to temp
+    tmpfile, header = urllib.urlretrieve(url)
+    filename = get_filename_from_header(header)
+    # create directory
+    if dest is None:
+        dest = os.curdir
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+    # rename
+    result_filename = os.path.join(dest, filename)
+    os.rename(tmpfile, result_filename)
+    return result_filename
+
 
 def get_domain(url, path=None):
     '''
@@ -399,7 +447,31 @@ def unescape(text):
     return re.sub("&#?\w+;", fixup, text)
 
 
+def list_album(url):
+    articles = parse_article_album_list(url)
+    # (article_num, title, post_date, author, path)
+    print url
+    for a in articles:
+        print "[%d] %s - by %s, %s" % (a.article_num, a.title, a.author, a.post_date)
+
+def download_images_in_album_view(url):
+    article_info = parse_article_album_view(url)
+    # (title, post_date, author, url, image_list)
+    print article_info.url
+    print "%s - by %s, %s" % (article_info.title, article_info.author, article_info.post_date)
+    for image_url in article_info.image_list:
+        filename = download_image(image_url, article_info.title)
+        print ' *', filename
 
 if __name__ == '__main__':
-    pass
+    url = sys.argv[1]
+
+    opener = authorize()
+    if not is_logged_in():
+        print "cannot login!"
+        sys.exit(1)
+
+    #list_album(url)
+    download_images_in_album_view(url)
+
 
