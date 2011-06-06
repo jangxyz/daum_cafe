@@ -3,6 +3,7 @@
 
 import unittest
 import types
+import codecs
 
 import daum_club_album
 from daum_club_album import *
@@ -38,10 +39,10 @@ class BackupUrlOpen:
 
 class LoginTestCase(unittest.TestCase, BackupUrlOpen):
     def setUp(self):
-        super(LoginTestCase, self).setUp()
+        super(self.__class__, self).setUp()
 
     def tearDown(self):
-        super(LoginTestCase, self).tearDown()
+        super(self.__class__, self).tearDown()
 
     def test_login(self):
         daum_club_album.urlopen = lambda *args, **kwargs: \
@@ -147,6 +148,52 @@ class ListCafeFromFavoritesTestCase(unittest.TestCase, BackupUrlOpen):
         assert isinstance(cafe_info, tuple)
         assert cafe_info[0] == "스포츠클라이밍 실내암벽 더탑"
         assert cafe_info[1] == "http://cafe.daum.net/loveclimb?t__nil_cafemy=item"
+
+
+class ListAlbumBoardTestCase(unittest.TestCase, BackupUrlOpen):
+    def setUp(self):
+        super(self.__class__, self).setUp()
+        #
+
+    def tearDown(self):
+        super(self.__class__, self).tearDown()
+
+
+    def test_parse_cafe_inner_url_from_official(self):
+        ''' should access official URL and retrieves inner URL '''
+        daum_club_album.urlopen = lambda *args, **kwargs: \
+            codecs.open('html/cafe1.html', encoding='cp949').read()
+
+        official_url = 'http://cafe.daum.net/loveclimb'
+        inner_url = parse_cafe_inner_url_from_official(official_url)
+
+        # validate
+        assert inner_url == 'http://cafe986.daum.net/_c21_/home?grpid=ccJT'
+
+
+    def test_parse_sidebar_menu_url_from_cafe_main(self):
+        daum_club_album.urlopen = lambda *args, **kwargs: \
+            codecs.open('html/cafe_main.html', encoding='cp949').read()
+
+        main_url = 'http://cafe986.daum.net/_c21_/home?grpid=ccJT'
+        sidebar_url = parse_sidebar_menu_url_from_cafe_main(main_url)
+
+        # validate
+        assert sidebar_url == 'http://cafe986.daum.net/_c21_/bbs_menu_cube?grpid=ccJT&amp;mgrpid=&amp;bmt=2011060609174720110604000828.9520110604000828.6420110425094836.16'
+
+    def test_parse_board_info_from_sidebar_menu(self):
+        daum_club_album.urlopen = lambda *args, **kwargs: \
+            codecs.open('html/cafe_sidebar.html', encoding='cp949').read()
+
+        sidebar_url = 'http://cafe986.daum.net/_c21_/bbs_menu_cube?grpid=ccJT&amp;mgrpid=&amp;bmt=2011060609174720110604000828.9520110604000828.6420110425094836.16'
+        result = parse_board_info_from_sidebar(sidebar_url)
+
+        # validate
+        assert len(result) is 33
+        assert result[0]  == (u'icon_recent', u'fldlink_recent_bbs', u'/_c21_/recent_bbs_list?grpid=ccJT&amp;fldid=_rec', u'최신글 보기', u'최신글 보기')
+        assert result[6]  == (u'icon_memo',  u'fldlink__memo_525', u'/_c21_/memo_list?grpid=ccJT&amp;fldid=_memo', u'일상의 순간순간 떠오르는 잡념이나,간단한 메세지를 적어보세요!!', u'한 줄 메모장')
+        assert result[14] == (u'icon_phone', u'fldlink__album_624', u'/_c21_/album_list?grpid=ccJT&amp;fldid=_album', u'클럽앨범', u'클럽앨범')
+
 
 
 if __name__ == '__main__':
