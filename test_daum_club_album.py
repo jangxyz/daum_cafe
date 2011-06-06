@@ -1,7 +1,4 @@
 #!/usr/bin/python
-'''
-<+ template in $VIMHOME/templates/py_test.tpl. type CTRL-J to advance to next +>
-'''
 
 import unittest
 import types
@@ -14,7 +11,20 @@ class Mock:
         self.__args = args
         self.__kwargs = kwargs
         for k,v in kwargs.iteritems():
+            if isinstance(v, ins_m):
+                _instance = self
+                _class = self.__class__
+                v = types.MethodType(v.function, _instance, _class)
+            
+            #
             setattr(self, k, v)
+
+
+class ins_m:
+    ''' set given function as a instance method, to a Mock class '''
+    def __init__(self, function):
+        self.function = function
+    
 
 class LoginTestCase(unittest.TestCase):
     def setUp(self):
@@ -60,12 +70,14 @@ class AuthorizeTestCase(unittest.TestCase):
 
     def test_use_cookielib(self):
         # mock cookielib
-        c = daum_club_album.cookielib = Mock(cookiejar_count=0)
         def _counter(self):
             self.cookiejar_count += 1
-        daum_club_album.cookielib.CookieJar = \
-            types.MethodType(_counter, c, Mock)
+        daum_club_album.cookielib = Mock(
+            cookiejar_count=0,
+            CookieJar = ins_m(_counter),
+        )
 
+        assert daum_club_album.cookielib.cookiejar_count == 0
         # test
         authorize('username', 'password')
 
@@ -101,7 +113,6 @@ class AuthorizeTestCase(unittest.TestCase):
 
         # test
         authorize(username, password)
-
 
 
 if __name__ == '__main__':
