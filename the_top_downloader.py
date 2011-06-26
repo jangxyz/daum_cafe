@@ -13,17 +13,20 @@ import getpass
 from collections import namedtuple, defaultdict
 
 """
-    다음 카페 클럽앨범 이미지 다운로더
+    다음 카페 '더탑' 클럽앨범 이미지 다운로더
 
-        다음 카페 클럽앨범의 사진을 다운로드 받을 수 있도록 하는 스크립트
 
 """
-__program__ = u"다음 카페 이미지 다운로더"
+__program__ = u"더탑 클럽앨범 다운로더"
 __version__ = 0.1
 __author__ = u"김장환 janghwan@gmail.com"
 
 CAFE_START_PAGE = 'http://cafe.daum.net/'
 LOGIN_URL = "https://logins.daum.net/accounts/login.do"
+
+# http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album&page=2&prev_page=1&firstbbsdepth=0014zzzzzzzzzzzzzzzzzzzzzzzzzz&lastbbsdepth=0014kzzzzzzzzzzzzzzzzzzzzzzzzz&albumtype=article&listnum=30
+CLUB_ALBUM_URL = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album'
+CLUB_ALBUM_URL_TEMPLATE = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album&page=%(page)d&prev_page=%(prev_page)d&listnum=%(listnum)d&firstbbsdepth=%(firstbbsdepth)s&lastbbsdepth=%(lastbbsdepth)s'
 
 # globals
 opener = None
@@ -125,61 +128,6 @@ def authorize(username=None, password=None):
     return username
 
 
-def list_cafe_from_favorites(text=None):
-    '''
-    return list of tuple (cafe_name, cafe_url)
-
-    assumes content of http://cafe.daum.net/ page in text
-    start, finish: 
-        <div id="favorites" class="content">
-            ...
-        <div id="activities" class="content">
-    '''
-    _type = namedtuple('Cafe', 'name url'.split())
-
-    cafe_list = []
-
-    if text is None:
-        text = urlopen(CAFE_START_PAGE)
-
-    # extract region
-    FAVORITES_MARK = re.compile(u'''
-        # get content between div#favorites and div#activities
-        <div [^>]*id="favorites"[^>]*>      # start mark
-        (.*)
-        <div [^>]*id="activities"[^>]*>     # end mark
-    ''', re.S | re.X)
-    match = FAVORITES_MARK.search(text)
-    if not match:
-        raise Exception("parse error")
-
-    text = match.group(1).strip()
-    if not ('<tbody>' in text and '</tbody>' in text):
-        raise Exception("parse error")
-
-    text = text[text.index('<tbody>') : text.index('</tbody>')].strip()
-
-    # split table
-    LINK_PATTERN = re.compile(u'''
-        # get src and text node below A tag
-        <a [^>]*href="([^"]*)"[^>]*>    # anchor start
-        ([^<]*)                         # title
-        </a>                            # anchor end
-    ''', re.S | re.X)
-    for tr in text.split("<tr>")[1:]:
-        match = LINK_PATTERN.search(tr)
-        if match:
-            t = (match.group(2).strip(), match.group(1).strip())
-            cafe_list.append(_type(*t))
-
-    return cafe_list
-        
-
-
-def list_cafe_from_all():
-    pass
-
-
 def list_album_board(url):
     '''
         (category, id, path, title, content, url)
@@ -256,10 +204,10 @@ def parse_board_info_from_sidebar(url):
 
     some of examples are:
             <li class="icon_movie_all "><a id="fldlink_movie_bbs" href="/_c21_/movie_bbs_list?grpid=ccJT" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#46041;&#50689;&#49345; &#48372;&#44592;">동영상 보기</a></li>
-            <li class="icon_board "><a id="fldlink_9VHG_286" href="/_c21_/bbs_list?grpid=ccJT&amp;fldid=9VHG" target="_parent" onclick="parent_().caller(this.href);return false;" class="" title="&#54616;&#44256;&#49910;&#51008;&#47568; &#47924;&#49832;&#47568;&#51060;&#46304; &#54624; &#49688; &#51080;&#45716; &#44277;&#44036;&#51077;&#45768;&#45796;">이런말 저런말</a></li>
-            <li class="icon_album "><a id="fldlink_6bUe_338" href="/_c21_/album_list?grpid=ccJT&amp;fldid=6bUe" target="_parent" onclick="parent_().caller(this.href);return false;" title="climbing picture &amp; info.">Squamish</a></li>
-            <li class="icon_phone "><a id="fldlink__album_624" href="/_c21_/album_list?grpid=ccJT&amp;fldid=_album" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#53364;&#47101;&#50536;&#48276;">클럽앨범</a></li>
-            <li class="icon_memo "><a id="fldlink__memo_525" href="/_c21_/memo_list?grpid=ccJT&amp;fldid=_memo" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#51068;&#49345;&#51032; &#49692;&#44036;&#49692;&#44036; &#46496;&#50724;&#47476;&#45716; &#51105;&#45392;&#51060;&#45208;,&#44036;&#45800;&#54620; &#47700;&#49464;&#51648;&#47484; &#51201;&#50612;&#48372;&#49464;&#50836;!!">한 줄 메모장</a><img src="http://i1.daumcdn.net/cafeimg/cf_img2/img_blank2.gif" width="10" height="9" alt="new" class="icon_new" /></li> 
+		    <li class="icon_board "><a id="fldlink_9VHG_286" href="/_c21_/bbs_list?grpid=ccJT&amp;fldid=9VHG" target="_parent" onclick="parent_().caller(this.href);return false;" class="" title="&#54616;&#44256;&#49910;&#51008;&#47568; &#47924;&#49832;&#47568;&#51060;&#46304; &#54624; &#49688; &#51080;&#45716; &#44277;&#44036;&#51077;&#45768;&#45796;">이런말 저런말</a></li>
+		    <li class="icon_album "><a id="fldlink_6bUe_338" href="/_c21_/album_list?grpid=ccJT&amp;fldid=6bUe" target="_parent" onclick="parent_().caller(this.href);return false;" title="climbing picture &amp; info.">Squamish</a></li>
+		    <li class="icon_phone "><a id="fldlink__album_624" href="/_c21_/album_list?grpid=ccJT&amp;fldid=_album" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#53364;&#47101;&#50536;&#48276;">클럽앨범</a></li>
+		    <li class="icon_memo "><a id="fldlink__memo_525" href="/_c21_/memo_list?grpid=ccJT&amp;fldid=_memo" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#51068;&#49345;&#51032; &#49692;&#44036;&#49692;&#44036; &#46496;&#50724;&#47476;&#45716; &#51105;&#45392;&#51060;&#45208;,&#44036;&#45800;&#54620; &#47700;&#49464;&#51648;&#47484; &#51201;&#50612;&#48372;&#49464;&#50836;!!">한 줄 메모장</a><img src="http://i1.daumcdn.net/cafeimg/cf_img2/img_blank2.gif" width="10" height="9" alt="new" class="icon_new" /></li> 
     '''
     _type = namedtuple('BoardInfo', 'category id path title content url'.split())
 
@@ -300,7 +248,44 @@ def parse_board_info_from_sidebar(url):
         ) for t in result]
 
 
-def parse_article_album_list(url):
+def parse_cafeapp_ui_info(text):
+    ''' parse javascript based info inside text 
+    
+        <script ...>
+        ...
+            CAFEAPP.ui = {
+                ...
+            }
+        ...
+        </script>
+    '''
+    cafeapp_ui_dict = {}
+
+    script_start, cafeapp_ui_start = False, False
+    for line in text.split("\n"):
+
+        if '<script' in line and '</script>' in line:
+            if line.rindex('<script') > line.rindex('</script>'):   script_start = True
+            else:                                                   script_start = False
+        elif '<script'   in line:     script_start = True
+        elif '</script>' in line:   script_start = False
+
+        if script_start:
+            if cafeapp_ui_start:
+                if '}' in line:
+                    cafeapp_ui_start = False
+                else:
+                    k,v = line.strip().split(':', 1)
+                    cafeapp_ui_dict[ k.strip() ] = v.strip().rstrip(',').strip('"')
+
+            if '''CAFEAPP.ui = {''' in line:
+                cafeapp_ui_start = True
+
+        else:
+            if len(cafeapp_ui_dict) > 0:
+                return cafeapp_ui_dict
+
+def parse_article_album_list(url, text=None):
     ''' parse article album list and result list of article information as a tuple:
         (article_num, title, post_date, author, path, url)
     '''
@@ -309,7 +294,10 @@ def parse_article_album_list(url):
     ARTICLE_LIST_START_MARK = '''<div class="albumListBox">'''
     ARTICLE_LIST_END_MARK   = '''<!-- end albumListBox -->'''
 
-    text = urlopen(url)
+    # fetch
+    if text is None:
+        text = urlopen(url)
+
     if not(ARTICLE_LIST_START_MARK in text and ARTICLE_LIST_END_MARK in text):
         raise Exception("parse error")
     text = text[ text.index(ARTICLE_LIST_START_MARK): text.index(ARTICLE_LIST_END_MARK) ]
@@ -363,7 +351,7 @@ def parse_article_album_view(url):
     ''' parse article album view and result list of article information as a tuple:
         (title, post_date, author, url, image_list)
     '''
-    _type = namedtuple('FullArticleInfo', 'title post_date author url image_list'.split())
+    _type = namedtuple('DetailArticleInfo', 'article_num title post_date author url image_list'.split())
 
     # inner url
     parse_result = urllib2.urlparse.urlparse(url)
@@ -410,18 +398,33 @@ def parse_article_album_view(url):
         raise Exception("parse error")
     text = text[ text.index(CONTENT_START_MARK): text.index(CONTENT_END_MARK) ]
 
-    IMAGE_SRC_PATTERN = re.compile(u'''<img [^>]*src="([^"]*)"[^>]*/>''')
+    IMAGE_SRC_PATTERN = re.compile(u'''<img [^>]*src="([^"]*)"[^>]*/?>''')
     image_list = IMAGE_SRC_PATTERN.findall(text)
 
     # 
     d = article_info
     return _type(
+        get_article_num_from_url(d['url']),
         d['title'].strip(), 
         d['post_date'], 
         d['author'].strip(), 
         d['url'],
         image_list
     )
+
+
+def get_article_num_from_url(url):
+    if not is_cafe_article_view_url(url):
+        return None
+
+    # http://cafe.daum.net/loveclimb/9uox/318
+    if is_cafe_article_view_official_url(url):
+        return int(url.rsplit('/', 1)[-1])
+    # http://cafe335.daum.net/_c21_/bbs_read?grpid=TweC&mgrpid=&fldid=AtV9&page=1&prev_page=0&firstbbsdepth=&lastbbsdepth=zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz&contentval=00016zzzzzzzzzzzzzzzzzzzzzzzzz&datanum=68&listnum=20
+    elif is_cafe_article_view_inner_url(url):
+        query = url.rpartition('?')[-1]
+        query_dict = dict(kv.split('=') for kv in query.split('&'))
+        return int(query_dict['datanum'])
 
 
 def is_cafe_main_url(url):
@@ -573,6 +576,25 @@ def is_cafe_article_view_inner_url(url):
     return True
 
 
+def download_image(url, dest=None):
+    # download to temp
+    tmpfile, header = urllib.urlretrieve(url)
+    filename = get_filename_from_header(header)
+
+    # create directory
+    if dest is None:
+        dest = os.curdir
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+
+    # rename
+    result_filename = os.path.join(dest, filename)
+    os.rename(tmpfile, result_filename)
+    return result_filename
+
+#
+# util
+#
 def get_domain(url, path=None):
     '''
         urlparse:
@@ -629,221 +651,261 @@ def unescape(text, repeat=None):
 
     return new_text
 
-def download_image(url, dest=None):
-    # download to temp
-    tmpfile, header = urllib.urlretrieve(url)
-    filename = get_filename_from_header(header)
+def is_hangul(u):
+    return u'가' <= u <= u'힣' or u'ㄱ' <= u <= u'ㅎ'
 
-    # create directory
-    if dest is None:
-        dest = os.curdir
-    if not os.path.exists(dest):
-        os.makedirs(dest)
+def count_hangul(u):
+    return sum(is_hangul(x) for x in u)
 
-    # rename
-    result_filename = os.path.join(dest, filename)
-    os.rename(tmpfile, result_filename)
-    return result_filename
 
 
 #
 # application
 #
+class Article: pass
+
 def intro():
-    return u"%s v%s (만든이 %s)" % (__program__, str(__version__), __author__)
+    print u"%s v%s (만든이 %s)" % (__program__, str(__version__), __author__)
 
-def print_breadcrumb():
-    login = u"로그인: %s" % logged_in_username if logged_in_username else None
-    cafe  = u"카페: %s" % current_cafe if current_cafe is not None else None
-    board = current_board if current_board else None
-    breadcrumb = " > ".join(filter(None, [login, cafe, board]))
-    if breadcrumb:
-        print breadcrumb
+def print_help():
+    print '''[도움말]
 
-def download_images_in_album_view(url):
-    article_info = parse_article_album_view(url)
-    # (title, post_date, author, url, image_list)
-    print article_info.url
-    print "%s - by %s, %s" % (article_info.title, article_info.author, article_info.post_date)
-    for image_url in article_info.image_list:
-        filename = download_image(image_url, article_info.title)
-        print ' *', filename
+<페이지 이동>
+  다음 페이지를 보고 싶으면 n을, 
+  이전 페이지를 보고 싶으면 p를 입력하세요.
+  
+<선택>
+  한번에 다운로드 받고 싶은 번호들을 모두 선택해주세요.
+  예)
+   “판교외벽 사진을 한번에 받고 싶다” --> '4147-4143'
+   “톱쟁이가 올린 사진을 받고 싶다”   --> '4141, 4140, 4151'
+   “우중산행?”                        --> '4153'
+   “드록바 빼고 전부 다”              --> '4153,4151-4138'
+  
+  선택된 번호를 보고 싶으면 s를 누르면 됩니다.
+  
+<다운로드>
+  엔터를 입력하면 다운로드가 진행됩니다.
+'''
+    raw_input("[엔터를 누르세요]")
 
-def ask_cafe_from_favorites():
-    global current_cafe
+def list_page(page, current_page, articles, selected=[]):
+    print "스포츠클라이밍 실내암벽 더탑 > 클럽앨범 > page %d" % current_page
 
-    cafe_info_list = list_cafe_from_favorites()
-    print_breadcrumb()
+    def title_length(title):
+        return len(title) + count_hangul(title)
 
-    # print
-    def ask():
-        for i,cafe in enumerate(cafe_info_list):
-            print u"%d) %s - %s\n" % (i+1, cafe.name, cafe.url)
-        return raw_input("> 선택하세요: ").decode(fs_encoding)
+    max_title_length = max(title_length(a.title)    for a in articles)
+    max_image_count  = max(len(`len(a.image_list)`) for a in articles)
 
-    while True:
-        answer = ask().strip()
-
-        if answer == u'':
-            return
-
-        if answer.isdigit():
-            answer_index = int(answer) - 1
-            if 0 <= answer_index < len(cafe_info_list):
-                current_cafe = cafe_info_list[answer_index].name
-                return cafe_info_list[answer_index].url
-        else:
-            def print_warning_if_no_cafe(cafes):
-                if len(cafes) == 0:
-                    print u"'%s'에 해당하는 카페는 찾을 수 없네요." % answer
-
-            def print_warning_if_too_many_cafes(cafes):
-                if len(cafes) > 1:
-                    print u"'%s'에 해당하는 카페가 많아서 어떤 것인지 모르겠습니다:." % answer
-                    for cafe in cafes:
-                        print u" * %s - %s\n" % (cafe.name, cafe.url)
-
-            cafes = [cafe for cafe in cafe_info_list if cafe.name.strip() == answer or cafe.url.strip() == answer]
-            # exact match
-            if len(cafes) == 1:
-                current_cafe = cafes[0].name
-                return cafes[0].url
-            else:
-                print_warning_if_too_many_cafes(cafes)
-
-            # partial match
-            cafes = [cafe for cafe in cafe_info_list if (answer in cafe.name.strip()) or (answer in cafe.url.strip())]
-            if len(cafes) == 1:
-                current_cafe = cafes[0].name
-                return cafes[0].url
-            else:
-                print_warning_if_no_cafe(cafes)
-                print_warning_if_too_many_cafes(cafes)
-
-
-def ask_bbs_category(boards):
-    print_breadcrumb()
-
-    category_dict = defaultdict(list)
-    for b in boards:
-        cat = b.category.lstrip("icon_")
-        category_dict[cat].append(b.content.strip())
-
-    def category_order(x):
-        if   x == "album"     : return 1
-        elif x == "phone"     : return 2
-        elif x == "memo"      : return 3
-        elif x == "know"      : return 4
-        elif x == "best"      : return 5
-        elif x == "recent"    : return 6
-        elif x == "movie_all" : return 7
-        elif x == "board"     : return 8
-        elif x == "etc"       : return 9
-        else:                   return 100
-    category_key_list = sorted(category_dict.keys(), key=category_order)
-    while True:
-        for i, cat in enumerate(category_key_list):
-            print " %d) %s - %s" % (i+1, cat, ", ".join(category_dict[cat]))
-        answer = raw_input("> 게시판 종류를 선택하세요(1~%d): " % len(category_key_list))
-        answer = answer.decode(fs_encoding).strip()
-
-        if answer == '':
-            return
-
-        if answer.isdigit():
-            answer_index = int(answer) - 1
-            if 0 <= answer_index < len(category_key_list):
-                return "icon_" + category_key_list[answer_index]
-        print "1부터 %d 사이의 숫자를 입력해주세요." % len(category_key_list)
-        print
-
-def ask_board(boards, category=None):
-    global current_board
-
-    print_breadcrumb()
-    
-    if category:
-        if not category.startswith("icon_"):
-            category = "icon_" + category
-        boards = [b for b in boards if b.category == category]
-
-    if len(boards) == 1:
-        answer = raw_input("> '%s' 게시판을 선택하시겠습니까(Y/n)? " % boards[0].content.encode(fs_encoding))
-        answer = answer.decode(fs_encoding).strip()
-        if answer.lower() != 'n':
-            current_board = boards[0].content
-            return boards[0].url
-        else:
-            return
-
-    while True:
-        for i, b in enumerate(boards):
-            print " %d) %s" % (i+1, b.content)
-
-        answer = raw_input("> 게시판을 선택하세요(1-%d): " % len(boards))
-        answer = answer.decode(fs_encoding).strip()
-        if answer == '':
-            return
-
-        if answer.isdigit():
-            answer_index = int(answer) - 1
-            if 0 <= answer_index < len(boards):
-                current_board = boards[answer_index].content
-                return boards[answer_index].url
-        print "1부터 %d 사이의 숫자를 입력해주세요." % len(boards)
-        print
-
-    
-
-def print_board_list(url):
-    boards = list_album_board(url)
-    for b in boards:
-        #print " * [%(category)s] %(content)s - %(title)s : %(path)s <%(id)s>" % b._asdict()
-        print " * %(content)s - %(title)s" % b._asdict()
-
-def print_brief_info_in_album_list(url):
-    articles = parse_article_album_list(url)
-    # (article_num, title, post_date, author, path)
     for a in articles:
-        print "[%d] %s - by %s, %s" % (a.article_num, a.title, a.author, a.post_date)
+        post_date = a.post_date.replace('. ', ' ')
+        image_count = len(a.image_list)
+        author = a.author.partition('(')[0]
+        space = ''.ljust(max_title_length + max_image_count - title_length(a.title) - len(`image_count`))
+        if a.url in selected:  selected_str = '*'
+        else:                  selected_str = ' '
+        print "%s %d) %s | %s [%d] %s- %s" % (selected_str, a.article_num, post_date, a.title, image_count, space, author)
+    print
 
-def print_detail_info_in_album_list(url):
-    articles = parse_article_album_list(url)
-    #articles = [parse_article_album_view(a.url) for a in articles]
+def list_selected_articles(articles, selected):
+    '''
+    * 4150) 2011.06.19 22:01 | 암벽16기 4차교육_선인봉_2 [19]               - 웅이
+    * 4145) 2011.06.18 21:44 | 20110618 판교외벽_3 [17]                     - 웅이
+    * 4139) 2011.06.14 01:04 | 20110612 간현암 [8]                          - 웡이
+    '''
+
+    if len(selected) == 0:
+        print "선택한 게시물이 없습니다."
+    else:
+        def title_length(title):
+            return len(title) + count_hangul(title)
+        max_title_length = max(title_length(a.title)    for a in articles)
+        max_image_count  = max(len(`len(a.image_list)`) for a in articles)
+
+        for a in articles:
+            if a.url not in selected:
+                continue
+            post_date = a.post_date.replace('. ', ' ')
+            image_count = len(a.image_list)
+            space = ''.ljust(max_title_length + max_image_count - title_length(a.title) - len(`image_count`))
+            print "* %d) %s | %s [%d] %s- %s" % (a.article_num, post_date, a.title, image_count, space, a.author)
+
+    raw_input("[엔터를 누르세요]")
+
+def interpret_selection(selection):
+    ''' selection may be in form of 
+
+      * '4153'            => [4153]
+      * '4141 4140, 4151' => [4140, 4141, 4151]
+      * '4147-4143'       => range(4143, 4147)
+      * '4153,4151-4138'  => [4153] + range(4138,4151)
+    '''
+    if ',' in selection:
+        selections = [s.strip() for s in selection.split(",")]
+    else:
+        selections = [selection]
+    #
+    minmax = lambda a: (min(a), max(a))
+    #
+    results = []
+    for sel in selections:
+        if '-' in sel:
+            small, large = minmax(map(int, sel.split('-')))
+            results.extend(range(small, large+1))
+        elif ' ' in sel:
+            results.extend(map(int, sel.split(' ')))
+        else:
+            results.append(int(sel))
+    return set(results)
+
+def is_selection_format(s):
+    return re.match("[-0-9 ,]+", s) is not None
+
+def select_articles(selection, current_page, cached_articles, articles, selected):
     for a in articles:
-        a2 = parse_article_album_view(a.url)
-        # (title, post_date, author, url, image_list)
-        print "[%d] %s [%d] - by %s, %s" % (a.article_num, a2.title, len(a2.image_list), a2.author, a2.post_date)
+        if a.article_num not in selection:
+            continue
+        # toggle
+        if a.url in selected:   selected.remove(a.url)
+        else:                   selected.add(a.url)
+        # remove from selection
+        selection.remove(a.article_num)
 
+    # still left? search cache
+    if len(selection) > 0:
+        for page, articles in cached_articles.iteritems():
+            if page == current_page:
+                continue
+            for a in articles:
+                if a.article_num not in selection:
+                    continue
+                # toggle
+                if a.url in selected:   selected.remove(a.url)
+                else:                   selected.add(a.url)
+                # remove from selection
+                selection.remove(a.article_num)
+
+    return selected
+
+def save_directory():
+    pass
+
+def download(articles, selected):
+    pass
+
+def user_input(selected_count):
+    print '이전페이지(p), 다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)'
+    if selected_count:
+        print '현재 선택 %d개. 입력(enter는 다운로드) >' % selected_count,
+    else:
+        print '입력(enter는 다운로드) >',
+    return raw_input()
+
+def get_album_url(new_page=1, articles_in_page=15, current_cafeapp_ui={}):
+    # http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album&page=2&prev_page=1&firstbbsdepth=0014zzzzzzzzzzzzzzzzzzzzzzzzzz&lastbbsdepth=0014kzzzzzzzzzzzzzzzzzzzzzzzzz&albumtype=article&listnum=15
+    # http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album&page=2&prev_page=1&listnum=15
+
+    # document.location.href="/_c21_/album_list?grpid="+CAFEAPP.GRPID+"&fldid="+CAFEAPP.FLDID+"&page="+page+"&prev_page="+CAFEAPP.ui.PAGER_page+"&firstbbsdepth="+CAFEAPP.ui.FIRSTBBSDEPTH+"&lastbbsdepth="+CAFEAPP.ui.LASTBBSDEPTH+"&albumtype=article&listnum="+listnum;
+    # "prev_page="+CAFEAPP.ui.PAGER_page + "&firstbbsdepth="+CAFEAPP.ui.FIRSTBBSDEPTH+"&lastbbsdepth="+CAFEAPP.ui.LASTBBSDEPTH
+
+    #prev_page = max(new_page - 1, 1)
+    if 'FIRSTBBSDEPTH' in current_cafeapp_ui and \
+       'PAGER_page'    in current_cafeapp_ui and \
+       'LASTBBSDEPTH'  in current_cafeapp_ui:
+           return CLUB_ALBUM_URL_TEMPLATE % {
+               'page'          : new_page,
+               'listnum'       : articles_in_page,
+               'prev_page'     : int(current_cafeapp_ui['PAGER_page']),
+               'firstbbsdepth' : current_cafeapp_ui['FIRSTBBSDEPTH'],
+               'lastbbsdepth'  : current_cafeapp_ui['LASTBBSDEPTH'],
+           }
+    # return first page
+    else:
+        return CLUB_ALBUM_URL
+
+def fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles):
+    if current_page < 1:
+        current_page = 1
+
+    album_url = get_album_url(current_page, articles_in_page, current_cafeapp_ui)
+    #print album_url
+    text = urlopen(album_url)
+
+    # update cafeapp_ui
+    new_cafeapp_ui = parse_cafeapp_ui_info(text)
+    if new_cafeapp_ui:
+        current_cafeapp_ui.update(new_cafeapp_ui)
+
+    # parse articles
+    articles0 = parse_article_album_list(album_url, text)
+    articles  = [parse_article_album_view(a.url) for a in articles0]
+
+    # save cache
+    cached_articles[current_page] = articles
+
+    return articles
 
 if __name__ == '__main__':
-    print intro()
-    print_breadcrumb()
+    intro()
+    print
 
     # login
-    print "로그인을 해주세요:"
+    print "로그인을 해주세요."
     authorize()
 
-    if len(sys.argv) == 1:
-        # choose cafe
-        url = ask_cafe_from_favorites()
-        if url:
-            print url
-            # cafe
+    # settings
+    current_page = 1
+    articles_in_page = 15
+    current_cafeapp_ui = {}
+    cached_articles = {}
 
-    else:
-        url = sys.argv[1]
+    #
+    articles  = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+    selected  = set()
+    context   = (articles, selected)
 
-        if is_cafe_main_url(url):
-            #print_board_list(url)
-            boards = list_album_board(url)
-            category = ask_bbs_category(boards)
-            board_url = ask_board(boards, category)
+    while True:
+        print
+        list_page(1, current_page, *context)
+        # 이전페이지(p), 다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)
+        # 현재 선택 3개. 입력(enter는 다운로드) >
+        resp = user_input(len(selected)).strip().lower()
 
-            #print_brief_info_in_album_list(board_url)
-            print_detail_info_in_album_list(board_url)
+        if resp == 'h':
+            print_help()
+        # next / previous
+        elif resp in ('p', 'n'):
+            if resp == 'p': current_page -= 1
+            else:           current_page += 1
+            if current_page in cached_articles:
+                articles = cached_articles[current_page]
+            else:
+                articles = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+        # reload
+        elif resp == 'l':
+            current_page = 1
+            articles  = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+        # list selected
+        elif resp == 's':
+            list_selected_articles(*context)
+        # add selection
+        elif is_selection_format(resp):
+            selection = interpret_selection(resp)
+            selected = select_articles(selection, current_page, cached_articles, *context)
+        # proceed
+        elif resp == '':
+            # exit on empty selection
+            if len(selected) == 0:
+                yn = raw_input("선택한 게시물이 없습니다. 종료하겠습니까? (Y/n) ").strip()
+                if yn.lower() != 'n':
+                    break
+            # download
+            else:
+                download(*context)
 
-        #list_album(url)
-        #download_images_in_album_view(url)
+        context = (articles, selected)
 
+    #list_album(url)
+    #download_images_in_album_view(url)
 
