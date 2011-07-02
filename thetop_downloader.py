@@ -1,9 +1,19 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
 
+__program__ = u"더탑 클럽앨범 다운로더"
+__version__ = 0.1
+__author__  = u"김장환 janghwan@gmail.com"
+
+"""
+    다음 카페 '더탑' 클럽앨범 이미지 다운로더
+
+
+"""
 import sys
 import os
 import re
+import datetime
 
 import htmlentitydefs
 import urllib, urllib2
@@ -11,15 +21,6 @@ import cookielib
 
 import getpass
 from collections import namedtuple, defaultdict
-
-"""
-    다음 카페 '더탑' 클럽앨범 이미지 다운로더
-
-
-"""
-__program__ = u"더탑 클럽앨범 다운로더"
-__version__ = 0.1
-__author__ = u"김장환 janghwan@gmail.com"
 
 CAFE_START_PAGE = 'http://cafe.daum.net/'
 LOGIN_URL = "https://logins.daum.net/accounts/login.do"
@@ -31,8 +32,6 @@ CLUB_ALBUM_URL_TEMPLATE = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&f
 # globals
 opener = None
 logged_in_username = None
-current_cafe  = None
-current_board = None
 
 fs_encoding = sys.getfilesystemencoding()
 
@@ -49,6 +48,7 @@ def urlopen(url):
     return text.decode(encoding)
 
 def get_encoding_from_header(header=None, url=None):
+    ''' either header or url must be provided '''
     if header is None:
         site = _open_site(url)
         header = site.headers
@@ -58,6 +58,7 @@ def get_encoding_from_header(header=None, url=None):
     return encoding
 
 def get_filename_from_header(header=None, url=None):
+    ''' either header or url must be provided '''
     if header is None:
         site = _open_site(url)
         header = site.headers
@@ -66,6 +67,17 @@ def get_filename_from_header(header=None, url=None):
         param = cd.split(';', 1)[1].strip()
         filename = param.partition('filename=')[2].strip('"')
         return filename
+    except:
+        raise Exception("parse error")
+
+def get_filename_from_header2(url):
+    site = _open_site(url)
+    header = site.headers
+    try:
+        cd = header.dict['content-disposition'].strip()
+        param = cd.split(';', 1)[1].strip()
+        filename = param.partition('filename=')[2].strip('"')
+        return filename, site
     except:
         raise Exception("parse error")
 
@@ -576,6 +588,11 @@ def is_cafe_article_view_inner_url(url):
     return True
 
 
+def download_image_info(url):
+    # download to temp
+    tmpfile, header = urllib.urlretrieve(url)
+    return (tmpfile, header)
+
 def download_image(url, dest=None):
     # download to temp
     tmpfile, header = urllib.urlretrieve(url)
@@ -657,12 +674,14 @@ def is_hangul(u):
 def count_hangul(u):
     return sum(is_hangul(x) for x in u)
 
+def print_length(title):
+    ''' return width of string if printed on console '''
+    return len(title) + count_hangul(title)
 
 
 #
 # application
 #
-class Article: pass
 
 def intro():
     print u"%s v%s (만든이 %s)" % (__program__, str(__version__), __author__)
@@ -687,28 +706,72 @@ def print_help():
 <다운로드>
   엔터를 입력하면 다운로드가 진행됩니다.
 '''
-    raw_input("[엔터를 누르세요]")
+    raw_input("[엔터를 누르세요] ")
 
-def list_page(page, current_page, articles, selected=[]):
+def rcut(u, cut_length, suffix=None):
+    ''' right cut given unicode to given cut_length, where cut_length is measured in console print '''
+    if print_length(u) <= cut_length:
+        return u
+    index = 0
+    while True:
+        length_so_far = print_length(u[:index])
+        if   length_so_far  > cut_length: return u[:index-1] if suffix is None else u[:index-1-len(suffix)] + suffix
+        elif length_so_far == cut_length: return u[:index]   if suffix is None else u[:index-1-len(suffix)] + suffix
+        index += 1
+
+def format_article(article, selected, max_width=79):
+    ''' 
+    _2_ 4?        _2_ 15      _3_ ?      2?        _5_  _10_
+        article_num)  post_date | title [image_count]         - author
+        4152) 2011.06.21 03:57 | 암벽교실 16기 6월 19일 [8]   - 드록바
+    '''
+    post_date   = article.post_date.replace('. ', ' ')
+    post_date   = post_date.rpartition('%s.' % datetime.datetime.today().strftime("%Y"))[-1]
+    author      = rcut(article.author, 10)
+    image_count = len(article.image_list)
+    article_num = article.article_num
+
+    if selected:  selected_str = '*'
+    else:         selected_str = ' '
+
+    image_count_part_length = 3 + len(`image_count`) 
+    title_length = max_width - 2 - len(`article_num`) - 2 - len(post_date) - 5 - 10
+    article_title = rcut(article.title, title_length - image_count_part_length , suffix='..')
+    article_title = "%s [%d]" % (article_title, image_count)
+
+    space = ''.ljust(title_length - print_length(article_title))
+
+    s  = ''
+    s += "%s"    % selected_str
+    s += " %d)"  % article_num
+    s += " %s"   % post_date
+    s += " | %s" % article_title
+    s += '%s'    % space
+    s += "- %s"  % author
+
+    return s
+    #return "%s %d) %s | %s [%d] %s- %s" % (selected_str, article_num, post_date, article_title, image_count, space, author)
+
+
+def list_page(current_page, articles, selected=[]):
     print "스포츠클라이밍 실내암벽 더탑 > 클럽앨범 > page %d" % current_page
 
-    def title_length(title):
-        return len(title) + count_hangul(title)
-
-    max_title_length = max(title_length(a.title)    for a in articles)
-    max_image_count  = max(len(`len(a.image_list)`) for a in articles)
+    #max_title_length = max(print_length(a.title)    for a in articles)
+    #max_image_count  = max(len(`len(a.image_list)`) for a in articles)
 
     for a in articles:
-        post_date = a.post_date.replace('. ', ' ')
-        image_count = len(a.image_list)
-        author = a.author.partition('(')[0]
-        space = ''.ljust(max_title_length + max_image_count - title_length(a.title) - len(`image_count`))
-        if a.url in selected:  selected_str = '*'
-        else:                  selected_str = ' '
-        print "%s %d) %s | %s [%d] %s- %s" % (selected_str, a.article_num, post_date, a.title, image_count, space, author)
+        #post_date = a.post_date.replace('. ', ' ')
+        #image_count = len(a.image_list)
+        #author = a.author.partition('(')[0]
+        #space = ''.ljust(max_title_length + max_image_count - print_length(a.title) - len(`image_count`))
+        #if a.url in selected:  selected_str = '*'
+        #else:                  selected_str = ' '
+        #print "%s %d) %s | %s [%d] %s- %s" % (selected_str, a.article_num, post_date, a.title, image_count, space, author)
+        print format_article(a, selected=(a.url in selected))
     print
+    return articles
 
-def list_selected_articles(articles, selected):
+def list_selected_articles(current_page, cached_articles, articles, selected):
     '''
     * 4150) 2011.06.19 22:01 | 암벽16기 4차교육_선인봉_2 [19]               - 웅이
     * 4145) 2011.06.18 21:44 | 20110618 판교외벽_3 [17]                     - 웅이
@@ -718,20 +781,20 @@ def list_selected_articles(articles, selected):
     if len(selected) == 0:
         print "선택한 게시물이 없습니다."
     else:
-        def title_length(title):
-            return len(title) + count_hangul(title)
-        max_title_length = max(title_length(a.title)    for a in articles)
+        max_title_length = max(print_length(a.title)    for a in articles)
         max_image_count  = max(len(`len(a.image_list)`) for a in articles)
 
-        for a in articles:
+        #for a in articles:
+        for a in resolve_selected_articles(current_page, cached_articles, articles, selected):
             if a.url not in selected:
                 continue
             post_date = a.post_date.replace('. ', ' ')
             image_count = len(a.image_list)
-            space = ''.ljust(max_title_length + max_image_count - title_length(a.title) - len(`image_count`))
-            print "* %d) %s | %s [%d] %s- %s" % (a.article_num, post_date, a.title, image_count, space, a.author)
+            author = a.author.partition('(')[0]
+            space = ''.ljust(max_title_length + max_image_count - print_length(a.title) - len(`image_count`))
+            print "* %d) %s | %s [%d] %s- %s" % (a.article_num, post_date, a.title, image_count, space, author)
 
-    raw_input("[엔터를 누르세요]")
+    raw_input("[엔터를 누르세요] ")
 
 def interpret_selection(selection):
     ''' selection may be in form of 
@@ -762,6 +825,20 @@ def interpret_selection(selection):
 def is_selection_format(s):
     return re.match("[-0-9 ,]+", s) is not None
 
+def resolve_selected_articles(current_page, cached_articles, articles, selected):
+    # try with current articles
+    selected_articles = [a for a in articles if a.url in selected]
+
+    # still left? search cache
+    if len(selected_articles) < len(selected):
+        for page, c_articles in cached_articles.iteritems():
+            if page == current_page:
+                continue
+            selected_articles.extend(a for a in c_articles if a.url in selected)
+
+    return selected_articles
+
+
 def select_articles(selection, current_page, cached_articles, articles, selected):
     for a in articles:
         if a.article_num not in selection:
@@ -788,14 +865,90 @@ def select_articles(selection, current_page, cached_articles, articles, selected
 
     return selected
 
-def save_directory():
-    pass
+def get_save_directory():
+    # TODO: change default directory
+    base_directory = os.path.abspath(os.path.dirname(__file__))
 
-def download(articles, selected):
-    pass
+    path_resolved = False
+    while not path_resolved:
+        print "저장할 폴더 이름을 정해주세요. 바탕화면 아래에 저장됩니다."
+        folder_name = raw_input('(예: "간현암 판교외벽 선인봉") > ')
+        print
 
-def user_input(selected_count):
-    print '이전페이지(p), 다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)'
+        if os.path.exists(folder_name):
+            print os.path.normpath(os.path.join(base_directory, folder_name)), '아래에 저장합니다.'
+            path_resolved = True
+        elif os.path.sep in folder_name:
+            for i in range(folder_name.count(os.path.sep)):
+                subpath = folder_name.rsplit(os.path.sep, i+1)[0]
+                print 'testing', subpath, os.path.exists(subpath)
+                if os.path.exists(subpath):
+                    new_folder = folder_name.rpartition(subpath)[-1].lstrip('/')
+                    yn = raw_input("%s/ 아래에 '%s' 폴더를 생성하겠습니까? (Y/n) " % (subpath, new_folder)).strip()
+                    if yn.lower() != 'n':
+                        os.makedirs(os.path.join(subpath, new_folder))
+                        path_resolved = True
+                    break
+
+        if not os.path.exists(folder_name):
+            yn = raw_input('%s 경로가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) ' % folder_name).strip()
+            if yn.lower() != 'n':
+                os.makedirs(os.path.join(base_directory, folder_name))
+                path_resolved = True
+
+    return os.path.normpath(os.path.join(base_directory, folder_name))
+
+def download(current_page, cached_articles, articles, selected):
+    base_directory = get_save_directory()
+
+    selected_articles = resolve_selected_articles(current_page, cached_articles, articles, selected)
+    max_title_length = max(print_length(a.title)    for a in selected_articles)
+    max_image_count  = max(len(`len(a.image_list)`) for a in selected_articles)
+
+    total_image_sum = sum(len(a.image_list) for a in selected_articles)
+    image_downloaded_so_far = 0
+
+    for i,a in enumerate(selected_articles):
+        post_date   = a.post_date.replace('. ', ' ')
+        title       = a.title.strip()
+        author      = a.author.partition('(')[0]
+        image_count = len(a.image_list)
+        space = ''.ljust(max_title_length + max_image_count - print_length(title) - len(`image_count`))
+        print "(%d/%d) %d) %s | %s [%d] %s- %s" % (
+            i+1, len(selected_articles),
+            a.article_num, post_date, a.title, len(a.image_list), 
+            space, author)
+
+        folder_name = "[%s] %s" % (post_date.partition(' ')[0], title)
+        save_directory = os.path.join(base_directory, folder_name)
+        print u'다음 폴더에 저장합니다: "%s"' % save_directory
+        for j,url in enumerate(a.image_list):
+            image_index = `(j+1)`.zfill(max_image_count)
+            print "  [%s/%d]" % (image_index, image_count),
+
+            # download & filename
+            tmpfile, header = download_image_info(url)
+            filename = get_filename_from_header(header)
+            print filename, "...", 
+
+            print 'saving to', tmpfile
+
+            # move
+            result_filename = os.path.join(save_directory, filename)
+            os.rename(tmpfile, result_filename)
+            print "ok"
+
+            image_downloaded_so_far += 1
+
+        percent = image_downloaded_so_far * 100 / total_image_sum
+        print "전체 %d개 중 %d개 이미지를 저장 완료했습니다. (42%)" % (total_image_sum, image_downloaded_so_far, percent)
+        print
+
+
+def user_input(current_page, selected_count):
+    if current_page > 1:
+        print '이전페이지(p)',
+    print '다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)'
     if selected_count:
         print '현재 선택 %d개. 입력(enter는 다운로드) >' % selected_count,
     else:
@@ -824,12 +977,11 @@ def get_album_url(new_page=1, articles_in_page=15, current_cafeapp_ui={}):
     else:
         return CLUB_ALBUM_URL
 
-def fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles):
+def fetching_articles(current_page, articles_in_page, current_cafeapp_ui):
     if current_page < 1:
         current_page = 1
 
     album_url = get_album_url(current_page, articles_in_page, current_cafeapp_ui)
-    #print album_url
     text = urlopen(album_url)
 
     # update cafeapp_ui
@@ -838,8 +990,17 @@ def fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_ar
         current_cafeapp_ui.update(new_cafeapp_ui)
 
     # parse articles
-    articles0 = parse_article_album_list(album_url, text)
-    articles  = [parse_article_album_view(a.url) for a in articles0]
+    articles_brief = parse_article_album_list(album_url, text)
+    articles_iter  = (parse_article_album_view(a.url) for a in articles_brief)
+
+    return articles_iter
+
+
+def fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles):
+    articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
+
+    # evaluate articles
+    articles = list(articles)
 
     # save cache
     cached_articles[current_page] = articles
@@ -853,24 +1014,29 @@ if __name__ == '__main__':
     # login
     print "로그인을 해주세요."
     authorize()
+    print
 
     # settings
     current_page = 1
     articles_in_page = 15
     current_cafeapp_ui = {}
-    cached_articles = {}
+    cached_articles = {}    # { page_no: [articles], }
 
     #
-    articles  = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+    #articles  = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+    article_iter = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
     selected  = set()
-    context   = (articles, selected)
 
     while True:
-        print
-        list_page(1, current_page, *context)
+        articles = list_page(current_page, *(article_iter, selected))
+
+        # udpate context
+        cached_articles[current_page] = articles
+        context = (articles, selected)
+
         # 이전페이지(p), 다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)
         # 현재 선택 3개. 입력(enter는 다운로드) >
-        resp = user_input(len(selected)).strip().lower()
+        resp = user_input(current_page, len(selected)).strip().lower()
 
         if resp == 'h':
             print_help()
@@ -878,17 +1044,21 @@ if __name__ == '__main__':
         elif resp in ('p', 'n'):
             if resp == 'p': current_page -= 1
             else:           current_page += 1
+
             if current_page in cached_articles:
-                articles = cached_articles[current_page]
+                #articles = cached_articles[current_page]
+                article_iter = cached_articles[current_page]
             else:
-                articles = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+                #articles = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+                article_iter = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
         # reload
         elif resp == 'l':
             current_page = 1
-            articles  = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+            #articles  = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+            article_iter = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
         # list selected
         elif resp == 's':
-            list_selected_articles(*context)
+            list_selected_articles(current_page, cached_articles, *context)
         # add selection
         elif is_selection_format(resp):
             selection = interpret_selection(resp)
@@ -902,9 +1072,9 @@ if __name__ == '__main__':
                     break
             # download
             else:
-                download(*context)
+                download(current_page, cached_articles, *context)
 
-        context = (articles, selected)
+        print
 
     #list_album(url)
     #download_images_in_album_view(url)
