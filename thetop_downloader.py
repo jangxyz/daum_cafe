@@ -780,18 +780,20 @@ def list_selected_articles(current_page, cached_articles, articles, selected):
     if len(selected) == 0:
         print "선택한 게시물이 없습니다."
     else:
-        max_title_length = max(print_length(a.title)    for a in articles)
-        max_image_count  = max(len(`len(a.image_list)`) for a in articles)
+        #max_title_length = max(print_length(a.title)    for a in articles)
+        #max_image_count  = max(len(`len(a.image_list)`) for a in articles)
 
-        #for a in articles:
         for a in resolve_selected_articles(current_page, cached_articles, articles, selected):
             if a.url not in selected:
                 continue
-            post_date = a.post_date.replace('. ', ' ')
-            image_count = len(a.image_list)
-            author = a.author.partition('(')[0]
-            space = ''.ljust(max_title_length + max_image_count - print_length(a.title) - len(`image_count`))
-            print "* %d) %s | %s [%d] %s- %s" % (a.article_num, post_date, a.title, image_count, space, author)
+
+            print format_article(a, True)
+
+            #post_date = a.post_date.replace('. ', ' ')
+            #image_count = len(a.image_list)
+            #author = a.author.partition('(')[0]
+            #space = ''.ljust(max_title_length + max_image_count - print_length(a.title) - len(`image_count`))
+            #print "* %d) %s | %s [%d] %s- %s" % (a.article_num, post_date, a.title, image_count, space, author)
 
     raw_input("[엔터를 누르세요] ")
 
@@ -865,7 +867,7 @@ def select_articles(selection, current_page, cached_articles, articles, selected
     return selected
 
 def get_save_directory():
-    # TODO: change default directory
+    # TODO: change default directory to desktop
     base_directory = os.path.abspath(os.path.dirname(__file__))
 
     path_resolved = False
@@ -873,6 +875,8 @@ def get_save_directory():
         print "저장할 폴더 이름을 정해주세요. 바탕화면 아래에 저장됩니다."
         folder_name = raw_input('(예: "간현암 판교외벽 선인봉") > ')
         print
+        if folder_name.strip() == '':
+            continue
 
         if os.path.exists(folder_name):
             print os.path.normpath(os.path.join(base_directory, folder_name)), '아래에 저장합니다.'
@@ -919,18 +923,21 @@ def download(current_page, cached_articles, articles, selected):
             space, author)
 
         folder_name = "[%s] %s" % (post_date.partition(' ')[0], title)
-        save_directory = os.path.join(base_directory, folder_name)
+        save_directory = os.path.join(base_directory.decode(fs_encoding), folder_name)
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
         print u'다음 폴더에 저장합니다: "%s"' % save_directory
         for j,url in enumerate(a.image_list):
             image_index = `(j+1)`.zfill(max_image_count)
             print "  [%s/%d]" % (image_index, image_count),
 
             # download & filename
+            url = url.replace('daum.net/image/', 'daum.net/original/')
             tmpfile, header = download_image_info(url)
             filename = get_filename_from_header(header)
+            filename = unescape(filename)
             print filename, "...", 
-
-            print 'saving to', tmpfile
 
             # move
             result_filename = os.path.join(save_directory, filename)
@@ -940,14 +947,20 @@ def download(current_page, cached_articles, articles, selected):
             image_downloaded_so_far += 1
 
         percent = image_downloaded_so_far * 100 / total_image_sum
-        print "전체 %d개 중 %d개 이미지를 저장 완료했습니다. (42%)" % (total_image_sum, image_downloaded_so_far, percent)
+        print "전체 %d개 중 %d개 이미지를 저장 완료했습니다. (%.0f%%)" % (total_image_sum, image_downloaded_so_far, percent)
         print
 
 
 def user_input(current_page, selected_count):
+    # line1
     if current_page > 1:
         print '이전페이지(p),',
-    print '다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)'
+    print '다음페이지(n), 다시보기(l), 선택(번호),',
+    if selected_count:
+        print '선택된번호(s),',
+    print '도움말(h)'
+
+    # line2
     if selected_count:
         print '현재 선택 %d개. 입력(enter는 다운로드) >' % selected_count,
     else:
@@ -995,17 +1008,6 @@ def fetching_articles(current_page, articles_in_page, current_cafeapp_ui):
     return articles_iter
 
 
-def fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles):
-    articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
-
-    # evaluate articles
-    articles = list(articles)
-
-    # save cache
-    cached_articles[current_page] = articles
-
-    return articles
-
 if __name__ == '__main__':
     intro()
     print
@@ -1022,12 +1024,11 @@ if __name__ == '__main__':
     cached_articles = {}    # { page_no: [articles], }
 
     #
-    #articles  = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
-    article_iter = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
+    articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
     selected  = set()
 
     while True:
-        articles = list_page(current_page, *(article_iter, selected))
+        articles = list_page(current_page, *(articles, selected))
 
         # udpate context
         cached_articles[current_page] = articles
@@ -1045,11 +1046,9 @@ if __name__ == '__main__':
             else:           current_page += 1
 
             if current_page in cached_articles:
-                #articles = cached_articles[current_page]
-                article_iter = cached_articles[current_page]
+                articles = cached_articles[current_page]
             else:
-                #articles = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
-                article_iter = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
+                articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
         # reload
         elif resp == 'l':
             # reset settings
@@ -1057,7 +1056,7 @@ if __name__ == '__main__':
             articles_in_page = 15
             cached_articles.clear()
             current_cafeapp_ui = {}
-            article_iter = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
+            articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
         # list selected
         elif resp == 's':
             list_selected_articles(current_page, cached_articles, *context)
