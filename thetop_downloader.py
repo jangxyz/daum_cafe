@@ -671,12 +671,19 @@ def unescape(text, repeat=None):
 def is_hangul(u):
     return u'가' <= u <= u'힣' or u'ㄱ' <= u <= u'ㅎ'
 
+def is_fullwidth(u):
+    ''' from FULLWIDTH EXCLAMATION MARK(\uff01) to FULLWIDTH RIGHT WHITE PARENTHESIS(\uff60) '''
+    return u'\uff01' <= u <= u'\uff60'
+
 def count_hangul(u):
     return sum(is_hangul(x) for x in u)
 
+def count_fullwidth(u):
+    return sum(is_fullwidth(x) for x in u)
+
 def print_length(title):
     ''' return width of string if printed on console '''
-    return len(title) + count_hangul(title)
+    return len(title) + count_hangul(title) + count_fullwidth(title)
 
 
 #
@@ -750,24 +757,16 @@ def format_article(article, selected, max_width=79):
     s += "- %s"  % author
 
     return s
-    #return "%s %d) %s | %s [%d] %s- %s" % (selected_str, article_num, post_date, article_title, image_count, space, author)
 
 
-def list_page(current_page, articles, selected=[]):
+def list_page(current_page, articles_iter, selected=[]):
     print "스포츠클라이밍 실내암벽 더탑 > 클럽앨범 > page %d" % current_page
+    articles = []
 
-    #max_title_length = max(print_length(a.title)    for a in articles)
-    #max_image_count  = max(len(`len(a.image_list)`) for a in articles)
-
-    for a in articles:
-        #post_date = a.post_date.replace('. ', ' ')
-        #image_count = len(a.image_list)
-        #author = a.author.partition('(')[0]
-        #space = ''.ljust(max_title_length + max_image_count - print_length(a.title) - len(`image_count`))
-        #if a.url in selected:  selected_str = '*'
-        #else:                  selected_str = ' '
-        #print "%s %d) %s | %s [%d] %s- %s" % (selected_str, a.article_num, post_date, a.title, image_count, space, author)
-        print format_article(a, selected=(a.url in selected))
+    for a in articles_iter:
+        is_selected = a.url in selected
+        print format_article(a, is_selected)
+        articles.append(a)
     print
     return articles
 
@@ -947,7 +946,7 @@ def download(current_page, cached_articles, articles, selected):
 
 def user_input(current_page, selected_count):
     if current_page > 1:
-        print '이전페이지(p)',
+        print '이전페이지(p),',
     print '다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)'
     if selected_count:
         print '현재 선택 %d개. 입력(enter는 다운로드) >' % selected_count,
@@ -1053,8 +1052,11 @@ if __name__ == '__main__':
                 article_iter = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
         # reload
         elif resp == 'l':
+            # reset settings
             current_page = 1
-            #articles  = fetch_articles(current_page, articles_in_page, current_cafeapp_ui, cached_articles)
+            articles_in_page = 15
+            cached_articles.clear()
+            current_cafeapp_ui = {}
             article_iter = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
         # list selected
         elif resp == 's':
