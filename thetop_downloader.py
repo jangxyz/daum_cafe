@@ -11,7 +11,6 @@ __author__  = u"김장환 janghwan@gmail.com"
 """
 import sys
 import os
-import signal
 import re
 import datetime
 
@@ -21,6 +20,10 @@ import cookielib
 
 import getpass
 from collections import namedtuple, defaultdict
+
+from contextlib import contextmanager 
+import winpaths
+#import signal
 
 CAFE_START_PAGE = 'http://cafe.daum.net/'
 LOGIN_URL = "https://logins.daum.net/accounts/login.do"
@@ -120,7 +123,7 @@ def authorize(retry_count=3):
     '''
 
     for _try_count in range(retry_count):
-        username = raw_input('Username: ')
+        username = raw_input(u'Username: ')
         password = getpass.getpass()
 
         login_data = {
@@ -152,7 +155,7 @@ def authorize(retry_count=3):
         del password, login_data
         break
     else:
-        print '도저히 로그인이 안되네요. 다음에 해보시죠.'
+        print u'도저히 로그인이 안되네요. 다음에 해보시죠.'
 
     # set default opener
     urllib2.install_opener(opener)
@@ -714,7 +717,7 @@ def intro():
     print u"%s v%s (만든이 %s)" % (__program__, str(__version__), __author__)
 
 def print_help():
-    print '''[도움말]
+    print u'''[도움말]
 
 <페이지 이동>
   다음 페이지를 보고 싶으면 n을, 
@@ -733,7 +736,7 @@ def print_help():
 <다운로드>
   엔터를 입력하면 다운로드가 진행됩니다.
 '''
-    raw_input("[엔터를 누르세요] ")
+    raw_input(u"[엔터를 누르세요] ".encode(fs_encoding))
 
 def rcut(u, cut_length, suffix=None):
     ''' right cut given unicode to given cut_length, where cut_length is measured in console print '''
@@ -768,19 +771,19 @@ def format_article(article, selected, max_width=79):
 
     space = ''.ljust(title_length - print_length(article_title))
 
-    s  = ''
-    s += "%s"    % selected_str
-    s += " %d)"  % article_num
-    s += " %s"   % post_date
-    s += " | %s" % article_title
-    s += '%s'    % space
-    s += "- %s"  % author
+    s  = u''
+    s += u"%s"    % selected_str
+    s += u" %d)"  % article_num
+    s += u" %s"   % post_date
+    s += u" | %s" % article_title
+    s += u'%s'    % space
+    s += u"- %s"  % author
 
     return s
 
 
 def list_page(current_page, articles_iter, selected=[]):
-    print "스포츠클라이밍 실내암벽 더탑 > 클럽앨범 > page %d" % current_page
+    print u"스포츠클라이밍 실내암벽 더탑 > 클럽앨범 > page %d" % current_page
     articles = []
 
     for a in articles_iter:
@@ -798,7 +801,7 @@ def list_selected_articles(current_page, cached_articles, articles, selected):
     '''
 
     if len(selected) == 0:
-        print "선택한 게시물이 없습니다."
+        print u"선택한 게시물이 없습니다."
     else:
         #max_title_length = max(print_length(a.title)    for a in articles)
         #max_image_count  = max(len(`len(a.image_list)`) for a in articles)
@@ -815,7 +818,7 @@ def list_selected_articles(current_page, cached_articles, articles, selected):
             #space = ''.ljust(max_title_length + max_image_count - print_length(a.title) - len(`image_count`))
             #print "* %d) %s | %s [%d] %s- %s" % (a.article_num, post_date, a.title, image_count, space, author)
 
-    raw_input("[엔터를 누르세요] ")
+    raw_input(u"[엔터를 누르세요] ".encode(fs_encoding))
 
 def interpret_selection(selection):
     ''' selection may be in form of 
@@ -888,33 +891,36 @@ def select_articles(selection, current_page, cached_articles, articles, selected
 
 def get_save_directory():
     # TODO: change default directory to desktop
-    base_directory = os.path.abspath(os.path.dirname(__file__))
+    if sys.platform.startswith('win32'):
+        base_directory = winpaths.get_desktop()
+    else:
+        #base_directory = os.path.abspath(os.path.dirname(__file__))
+        base_directory = os.path.abspath(os.path.dirname(sys.argv[0])).decode(fs_encoding)
 
     path_resolved = False
     while not path_resolved:
-        print "저장할 폴더 이름을 정해주세요. 바탕화면 아래에 저장됩니다."
-        folder_name = raw_input('(예: "간현암 판교외벽 선인봉") > ')
+        print u"저장할 폴더 이름을 정해주세요. 바탕화면 아래에 저장됩니다."
+        folder_name = raw_input(u'(예: "간현암 판교외벽 선인봉") > '.encode(fs_encoding)).decode(fs_encoding)
         print
-        if folder_name.strip() == '':
+        if folder_name.strip() == u'':
             continue
 
         if os.path.exists(folder_name):
-            print os.path.normpath(os.path.join(base_directory, folder_name)), '아래에 저장합니다.'
+            print os.path.normpath(os.path.join(base_directory, folder_name)), u'아래에 저장합니다.'
             path_resolved = True
         elif os.path.sep in folder_name:
             for i in range(folder_name.count(os.path.sep)):
                 subpath = folder_name.rsplit(os.path.sep, i+1)[0]
-                print 'testing', subpath, os.path.exists(subpath)
                 if os.path.exists(subpath):
                     new_folder = folder_name.rpartition(subpath)[-1].lstrip('/')
-                    yn = raw_input("%s/ 아래에 '%s' 폴더를 생성하겠습니까? (Y/n) " % (subpath, new_folder)).strip()
+                    yn = raw_input((u"%s/ 아래에 '%s' 폴더를 생성하겠습니까? (Y/n) " % (subpath, new_folder)).encode(fs_encoding)).strip()
                     if yn.lower() != 'n':
                         os.makedirs(os.path.join(subpath, new_folder))
                         path_resolved = True
                     break
 
         if not os.path.exists(folder_name):
-            yn = raw_input("'%s' 폴더가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) " % folder_name).strip()
+            yn = raw_input((u"'%s' 폴더가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) " % folder_name).encode(fs_encoding)).strip()
             if yn.lower() != 'n':
                 os.makedirs(os.path.join(base_directory, folder_name))
                 path_resolved = True
@@ -937,41 +943,41 @@ def download(current_page, cached_articles, articles, selected):
         author      = a.author.partition('(')[0]
         image_count = len(a.image_list)
         space = ''.ljust(max_title_length + max_image_count - print_length(title) - len(`image_count`))
-        print "(%d/%d) %d) %s | %s [%d] %s- %s" % (
+        print u"(%d/%d) %d) %s | %s [%d] %s- %s" % (
             i+1, len(selected_articles),
             a.article_num, post_date, a.title, len(a.image_list), 
             space, author)
 
         folder_name = "[%s] %s" % (post_date.partition(' ')[0], title)
-        save_directory = os.path.join(base_directory.decode(fs_encoding), folder_name)
+        save_directory = os.path.join(base_directory, folder_name)
         if not os.path.exists(save_directory):
             os.makedirs(save_directory)
 
         print u'다음 폴더에 저장합니다: "%s"' % save_directory
         for j,url in enumerate(a.image_list):
             image_index = `(j+1)`.zfill(max_image_count)
-            print "  [%s/%d]" % (image_index, image_count),
+            print u"  [%s/%d]" % (image_index, image_count),
 
             # download & filename
             url = url.replace('daum.net/image/', 'daum.net/original/')
             tmpfile, header = download_image_info(url)
             filename = get_filename_from_header(header)
             filename = unescape(filename)
-            print filename, "...", 
+            print filename, u"...", 
 
             # move
             result_filename = os.path.join(save_directory, filename)
             os.rename(tmpfile, result_filename)
-            print "ok"
+            print u"ok"
 
             image_downloaded_so_far += 1
 
         percent = image_downloaded_so_far * 100 / total_image_sum
-        print "전체 %d개 중 %d개 이미지를 저장 완료했습니다. (%.0f%%)" % (total_image_sum, image_downloaded_so_far, percent)
+        print u"전체 %d개 중 %d개 이미지를 저장 완료했습니다. (%.0f%%)" % (total_image_sum, image_downloaded_so_far, percent)
         print
 
     # download complete
-    print "다운로드가 완료되었습니다."
+    print u"다운로드가 완료되었습니다."
     print
     selected.clear()
 
@@ -980,17 +986,17 @@ def download(current_page, cached_articles, articles, selected):
 def user_input(current_page, selected_count):
     # line1
     if current_page > 1:
-        print '이전페이지(p),',
-    print '다음페이지(n), 다시보기(l), 선택(번호),',
+        print u'이전페이지(p),',
+    print u'다음페이지(n), 다시보기(l), 선택(번호),',
     if selected_count:
-        print '선택된번호(s),',
-    print '도움말(h)'
+        print u'선택된번호(s),',
+    print u'도움말(h)'
 
     # line2
     if selected_count:
-        print '현재 선택 %d개. 입력(enter는 다운로드) >' % selected_count,
+        print u'현재 선택 %d개. 입력(enter는 다운로드) >' % selected_count,
     else:
-        print '입력(enter는 다운로드) >',
+        print u'입력(enter는 다운로드) >',
     return raw_input()
 
 def get_album_url(new_page=1, articles_in_page=15, current_cafeapp_ui={}):
@@ -1033,80 +1039,133 @@ def fetching_articles(current_page, articles_in_page, current_cafeapp_ui):
 
     return articles_iter
 
-def install_signal_handler():
-    ''' install SIGINT '''
-    def sigint_handler(signum, frame):
-        sys.exit(signum)
-    signal.signal(signal.SIGINT, sigint_handler)
+#def install_signal_handler():
+#    ''' install SIGINT '''
+#    def sigint_handler(signum, frame):
+#        sys.exit(signum)
+#    signal.signal(signal.SIGINT, sigint_handler)
+
+
+#class GeneratorContextManager(object):
+#    def __init__(self, gen):
+#        self.gen = gen
+#
+#    def __enter__(self):
+#        try:
+#            return self.gen.next()
+#        except StopIteration:
+#            raise RuntimeError("generator didn't yield")
+#
+#    def __exit__(self, type, value, traceback):
+#        if type is None:
+#            try:
+#                self.gen.next()
+#            except StopIteration:
+#                return
+#            else:
+#                raise RuntimeError("generator didn't stop")
+#        else:
+#            if value is None:
+#                value = type()
+#            try:
+#                self.gen.throw(type, value, traceback)
+#                #raise RuntimeError("generator didn't stop after throw()")
+#            except StopIteration, exc:
+#                return exc is not value
+#            except:
+#                if sys.exc_info()[1] is not value:
+#                    raise
+#
+#from functools import wraps
+#def contextmanager(func):
+#    @wraps(func)
+#    def helper(*args, **kwds):
+#        return GeneratorContextManager(func(*args, **kwds))
+#    return helper
+
+@contextmanager
+def keyboard_interrupt_handler():
+    #while True:
+        try:
+            yield
+            #break
+        except KeyboardInterrupt:
+            #try:
+                #yn = raw_input(u"\n종료하시겠습니까? (Y/n) ".encode(fs_encoding))
+                #if yn.lower() != "n":
+                    sys.exit(2)
+                #continue
+            #except KeyboardInterrupt:
+            #    sys.exit(2)
 
 if __name__ == '__main__':
-    install_signal_handler()
+    with keyboard_interrupt_handler():
+        intro()
+        print
 
-    intro()
-    print
+        # login
+        print u"로그인을 해주세요."
+        authorize()
+        print
 
-    # login
-    print "로그인을 해주세요."
-    authorize()
-    print
 
-    # settings
-    current_page = 1
-    articles_in_page = 15
-    current_cafeapp_ui = {}
-    cached_articles = {}    # { page_no: [articles], }
+        # settings
+        current_page = 1
+        articles_in_page = 15
+        current_cafeapp_ui = {}
+        cached_articles = {}    # { page_no: [articles], }
 
-    #
-    articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
-    selected  = set()
+        #
+        articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
+        selected  = set()
 
-    while True:
-        articles = list_page(current_page, *(articles, selected))
+        while True:
+            articles = list_page(current_page, *(articles, selected))
 
-        # udpate context
-        cached_articles[current_page] = articles
-        context = (articles, selected)
+            # udpate context
+            cached_articles[current_page] = articles
+            context = (articles, selected)
 
-        # 이전페이지(p), 다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)
-        # 현재 선택 3개. 입력(enter는 다운로드) >
-        resp = user_input(current_page, len(selected)).strip().lower()
+            # 이전페이지(p), 다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)
+            # 현재 선택 3개. 입력(enter는 다운로드) >
+            resp = user_input(current_page, len(selected)).strip().lower()
 
-        if resp == 'h':
-            print_help()
-        # next / previous
-        elif resp in ('p', 'n'):
-            if resp == 'p': current_page -= 1
-            else:           current_page += 1
+            if resp in ('h', '?'):
+                print_help()
+            # next / previous
+            elif resp in ('p', 'n'):
+                if resp == 'p': current_page -= 1
+                else:           current_page += 1
 
-            if current_page in cached_articles:
-                articles = cached_articles[current_page]
-            else:
+                if current_page in cached_articles:
+                    articles = cached_articles[current_page]
+                else:
+                    articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
+            # reload
+            elif resp == 'l':
+                # reset settings
+                current_page = 1
+                articles_in_page = 15
+                cached_articles.clear()
+                current_cafeapp_ui = {}
                 articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
-        # reload
-        elif resp == 'l':
-            # reset settings
-            current_page = 1
-            articles_in_page = 15
-            cached_articles.clear()
-            current_cafeapp_ui = {}
-            articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
-        # list selected
-        elif resp == 's':
-            list_selected_articles(current_page, cached_articles, *context)
-        # add selection
-        elif is_selection_format(resp):
-            selection = interpret_selection(resp)
-            selected = select_articles(selection, current_page, cached_articles, *context)
-        # proceed
-        elif resp == '':
-            # exit on empty selection
-            if len(selected) == 0:
-                yn = raw_input("선택한 게시물이 없습니다. 종료하겠습니까? (Y/n) ").strip()
-                if yn.lower() != 'n':
-                    break
-            # download
-            else:
-                download(current_page, cached_articles, *context)
+            # list selected
+            elif resp == 's':
+                list_selected_articles(current_page, cached_articles, *context)
+            # add selection
+            elif is_selection_format(resp):
+                selection = interpret_selection(resp)
+                selected = select_articles(selection, current_page, cached_articles, *context)
+            # proceed
+            elif resp == '':
+                # exit on empty selection
+                if len(selected) == 0:
+                    yn = raw_input(u"선택한 게시물이 없습니다. 종료하겠습니까? (Y/n) ".encode(fs_encoding)).strip()
+                    if yn.lower() != 'n':
+                        break
+                # download
+                else:
+                    download(current_page, cached_articles, *context)
 
         print
 
