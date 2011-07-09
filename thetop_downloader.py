@@ -7,8 +7,7 @@ __author__  = u"김장환 janghwan@gmail.com"
 
 """
     다음 카페 '더탑' 클럽앨범 이미지 다운로더
-
-
+    
 """
 import sys
 import os
@@ -30,15 +29,15 @@ CLUB_ALBUM_URL = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_alb
 CLUB_ALBUM_URL_TEMPLATE = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album&page=%(page)d&prev_page=%(prev_page)d&listnum=%(listnum)d&firstbbsdepth=%(firstbbsdepth)s&lastbbsdepth=%(lastbbsdepth)s'
 
 # globals
-opener = None
-logged_in_username = None
+#opener = None
 
 fs_encoding = sys.getfilesystemencoding()
 
 
 def _open_site(url):
-    if opener is not None:  site = opener.open(url)
-    else:                   site = urllib.urlopen(url)
+    #if opener is not None:  site = opener.open(url)
+    #else:                   site = urllib.urlopen(url)
+    site = urllib2.urlopen(url)
     return site
 
 def urlopen(url):
@@ -106,7 +105,7 @@ def is_logged_in(text=None):
     return
         
 
-def authorize(username=None, password=None):
+def authorize(retry_count=3):
     '''
     <form name="loginform" id="loginForm" method="post" action="https://logins.daum.net/accounts/login.do">
         <input type="hidden" name="url" id="url" value="http://cafe.daum.net" />
@@ -118,24 +117,45 @@ def authorize(username=None, password=None):
         <input type="checkbox" name="saved_id" id="sid" title="아이디 저장" tabindex="3" /><label for="sid">ID 저장</label>
      </form>
     '''
-    global opener, logged_in_username
+    #global opener
 
-    if username is None:
+    for _try_count in range(retry_count):
         username = raw_input('Username: ')
-    if password is None:
         password = getpass.getpass()
 
-    login_data = {
-        "url": "http://cafe.daum.net",
-        "securityLevel": "2",
-        "id": username,
-        "pw": password,
-    }
-    #   
-    cj = cookielib.CookieJar()
-    opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
-    resp = opener.open(LOGIN_URL, data=urllib.urlencode(login_data))
-    del password, login_data
+        login_data = {
+            "url": "http://cafe.daum.net",
+            "securityLevel": "2",
+            "id": username,
+            "pw": password,
+        }
+        #   
+        cj = cookielib.CookieJar()
+        opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
+        resp = opener.open(LOGIN_URL, data=urllib.urlencode(login_data))
+
+        # login fail
+        html = resp.read().decode(get_encoding_from_header(resp.headers))
+        if u'<title>Daum 로그인 오류</title>' in html:
+            '''
+	    	<p id="errorMsg">
+	    		입력하신 아이디 혹은 비밀번호가 일치하지 않습니다.<br />
+	    		비밀번호는 대/소문자 구분하여 입력하시기 바랍니다.
+	    	</p>
+            '''
+            print html                              \
+                .partition('<p id="errorMsg">')[-1] \
+                .partition('</p>')[0]               \
+                .replace('<br />', "\n")
+            continue
+
+        del password, login_data
+        break
+    else:
+        print '도저히 로그인이 안되네요. 다음에 해보시죠.'
+
+    # set default opener
+    urllib2.install_opener(opener)
 
     return username
 
@@ -894,7 +914,7 @@ def get_save_directory():
                     break
 
         if not os.path.exists(folder_name):
-            yn = raw_input('%s 경로가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) ' % folder_name).strip()
+            yn = raw_input("'%s' 폴더가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) " % folder_name).strip()
             if yn.lower() != 'n':
                 os.makedirs(os.path.join(base_directory, folder_name))
                 path_resolved = True
@@ -949,6 +969,12 @@ def download(current_page, cached_articles, articles, selected):
         percent = image_downloaded_so_far * 100 / total_image_sum
         print "전체 %d개 중 %d개 이미지를 저장 완료했습니다. (%.0f%%)" % (total_image_sum, image_downloaded_so_far, percent)
         print
+
+    # download complete
+    print "다운로드가 완료되었습니다."
+    print
+    selected.clear()
+
 
 
 def user_input(current_page, selected_count):
