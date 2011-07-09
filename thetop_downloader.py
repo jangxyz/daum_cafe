@@ -615,21 +615,6 @@ def download_image_info(url):
     tmpfile, header = urllib.urlretrieve(url)
     return (tmpfile, header)
 
-def download_image(url, dest=None):
-    # download to temp
-    tmpfile, header = urllib.urlretrieve(url)
-    filename = get_filename_from_header(header)
-
-    # create directory
-    if dest is None:
-        dest = os.curdir
-    if not os.path.exists(dest):
-        os.makedirs(dest)
-
-    # rename
-    result_filename = os.path.join(dest, filename)
-    os.rename(tmpfile, result_filename)
-    return result_filename
 
 #
 # util
@@ -736,6 +721,7 @@ def print_help():
   엔터를 입력하면 다운로드가 진행됩니다.
 '''
     raw_input(u"[엔터를 누르세요] ".encode(fs_encoding))
+    print
 
 def rcut(u, cut_length, suffix=None):
     ''' right cut given unicode to given cut_length, where cut_length is measured in console print '''
@@ -818,32 +804,41 @@ def list_selected_articles(current_page, cached_articles, articles, selected):
             #print "* %d) %s | %s [%d] %s- %s" % (a.article_num, post_date, a.title, image_count, space, author)
 
     raw_input(u"[엔터를 누르세요] ".encode(fs_encoding))
+    print
 
 def interpret_selection(selection):
     ''' selection may be in form of 
 
-      * '4153'            => [4153]
-      * '4141 4140, 4151' => [4140, 4141, 4151]
-      * '4147-4143'       => range(4143, 4147)
-      * '4153,4151-4138'  => [4153] + range(4138,4151)
+      * '4153'                   => [4153]
+      * '4141 4140, 4151'        => [4140, 4141, 4151]
+      * '4147-4143'              => range(4143, 4147+1)
+      * '4153,4151-4138'         => [4153] + range(4138,4151+1)
+      * '4125, 4124 4121 - 4116' => [4125, 4124] + range(4116,4121+1)
     '''
-    if ',' in selection:
-        selections = [s.strip() for s in selection.split(",")]
-    else:
-        selections = [selection]
-    #
+
+    selections = [s.strip() for s in selection.replace(',', ' ').replace('-', ' - ').split(' ')]
+    selections = [s for s in selections if s]
+
     minmax = lambda a: (min(a), max(a))
-    #
-    results = []
-    for sel in selections:
-        if '-' in sel:
-            small, large = minmax(map(int, sel.split('-')))
-            results.extend(range(small, large+1))
-        elif ' ' in sel:
-            results.extend(map(int, sel.split(' ')))
+
+    result = []
+    i = 0
+    while i < len(selections):
+        token = selections[i]
+        if token == '-':
+            #new_val = result.pop() + '-' + selections[i+1]
+            first  = int(result.pop())
+            second = int(selections[i+1])
+            small, large = minmax((first, second))
+            result.extend(range(small, large+1))
+            #result.append(new_val)
+            i += 1
         else:
-            results.append(int(sel))
-    return set(results)
+            result.append(int(token))
+        i += 1
+
+    return set(result)
+
 
 def is_selection_format(s):
     return re.match("[-0-9 ,]+", s) is not None
@@ -889,7 +884,6 @@ def select_articles(selection, current_page, cached_articles, articles, selected
     return selected
 
 def get_save_directory():
-    # TODO: change default directory to desktop
     if sys.platform.startswith('win32'):
         import winpaths
         base_directory = winpaths.get_desktop()
@@ -914,6 +908,7 @@ def get_save_directory():
                 if os.path.exists(subpath):
                     new_folder = folder_name.rpartition(subpath)[-1].lstrip('/')
                     yn = raw_input((u"%s/ 아래에 '%s' 폴더를 생성하겠습니까? (Y/n) " % (subpath, new_folder)).encode(fs_encoding)).strip()
+                    print
                     if yn.lower() != 'n':
                         os.makedirs(os.path.join(subpath, new_folder))
                         path_resolved = True
@@ -921,6 +916,7 @@ def get_save_directory():
 
         if not os.path.exists(folder_name):
             yn = raw_input((u"'%s' 폴더가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) " % folder_name).encode(fs_encoding)).strip()
+            print
             if yn.lower() != 'n':
                 os.makedirs(os.path.join(base_directory, folder_name))
                 path_resolved = True
@@ -953,7 +949,7 @@ def download(current_page, cached_articles, articles, selected):
         if not os.path.exists(save_directory):
             os.makedirs(save_directory)
 
-        print u'다음 폴더에 저장합니다: "%s"' % save_directory
+        print u'%s' % save_directory
         for j,url in enumerate(a.image_list):
             image_index = `(j+1)`.zfill(max_image_count)
             print u"  [%s/%d]" % (image_index, image_count),
@@ -964,6 +960,7 @@ def download(current_page, cached_articles, articles, selected):
             filename = get_filename_from_header(header)
             filename = unescape(filename)
             print filename, u"...", 
+            sys.stdout.flush()
 
             # move
             result_filename = os.path.join(save_directory, filename)
@@ -1097,6 +1094,17 @@ def keyboard_interrupt_handler():
                 #continue
             #except KeyboardInterrupt:
             #    sys.exit(2)
+        except:
+            print
+            print
+            print u'어익후!'
+            print u'에러가 나서 프로그램이 종료해야 합니다. 미처 고려하지 못한 부분이 있었나보네요.' 
+            print u'현상이 반복되면 아래 내용을 복사해서 메일로 보내주세요.'
+            print u' ->', __author__ 
+            print u'문제를 진단하고 해결하는데 큰 도움이 됩니다.'
+            print '-' * 79
+            print sys.excepthook(*sys.exc_info())
+            sys.exit(-1)
 
 if __name__ == '__main__':
     with keyboard_interrupt_handler():
@@ -1129,6 +1137,7 @@ if __name__ == '__main__':
             # 이전페이지(p), 다음페이지(n), 다시보기(l), 선택된번호(s), 선택(번호), 도움말(h)
             # 현재 선택 3개. 입력(enter는 다운로드) >
             resp = user_input(current_page, len(selected)).strip().lower()
+            print
 
             if resp in ('h', '?'):
                 print_help()
