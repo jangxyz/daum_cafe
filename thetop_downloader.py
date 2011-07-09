@@ -11,6 +11,7 @@ __author__  = u"김장환 janghwan@gmail.com"
 """
 import sys
 import os
+import signal
 import re
 import datetime
 
@@ -117,7 +118,6 @@ def authorize(retry_count=3):
         <input type="checkbox" name="saved_id" id="sid" title="아이디 저장" tabindex="3" /><label for="sid">ID 저장</label>
      </form>
     '''
-    #global opener
 
     for _try_count in range(retry_count):
         username = raw_input('Username: ')
@@ -1033,8 +1033,15 @@ def fetching_articles(current_page, articles_in_page, current_cafeapp_ui):
 
     return articles_iter
 
+def install_signal_handler():
+    ''' install SIGINT '''
+    def sigint_handler(signum, frame):
+        sys.exit(signum)
+    signal.signal(signal.SIGINT, sigint_handler)
 
 if __name__ == '__main__':
+    install_signal_handler()
+
     intro()
     print
 
@@ -1102,7 +1109,4 @@ if __name__ == '__main__':
                 download(current_page, cached_articles, *context)
 
         print
-
-    #list_album(url)
-    #download_images_in_album_view(url)
 
