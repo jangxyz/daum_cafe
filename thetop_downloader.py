@@ -22,7 +22,6 @@ import getpass
 from collections import namedtuple, defaultdict
 
 from contextlib import contextmanager 
-import winpaths
 #import signal
 
 CAFE_START_PAGE = 'http://cafe.daum.net/'
@@ -892,6 +891,7 @@ def select_articles(selection, current_page, cached_articles, articles, selected
 def get_save_directory():
     # TODO: change default directory to desktop
     if sys.platform.startswith('win32'):
+        import winpaths
         base_directory = winpaths.get_desktop()
     else:
         #base_directory = os.path.abspath(os.path.dirname(__file__))
