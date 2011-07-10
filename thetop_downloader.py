@@ -899,29 +899,30 @@ def get_save_directory():
         if folder_name.strip() == u'':
             continue
 
-        if os.path.exists(folder_name):
-            print os.path.normpath(os.path.join(base_directory, folder_name)), u'아래에 저장합니다.'
+        fullpath = os.path.normpath(os.path.join(base_directory, folder_name))
+        if os.path.exists(fullpath):
+            print fullpath, u'아래에 저장합니다.'
             path_resolved = True
         elif os.path.sep in folder_name:
-            for i in range(folder_name.count(os.path.sep)):
-                subpath = folder_name.rsplit(os.path.sep, i+1)[0]
+            for i in range(fullpath.count(os.path.sep)):
+                subpath = fullpath.rsplit(os.path.sep, i+1)[0]
                 if os.path.exists(subpath):
-                    new_folder = folder_name.rpartition(subpath)[-1].lstrip('/')
-                    yn = raw_input((u"%s/ 아래에 '%s' 폴더를 생성하겠습니까? (Y/n) " % (subpath, new_folder)).encode(fs_encoding)).strip()
+                    new_folder = fullpath.rpartition(subpath)[-1].lstrip(os.path.sep)
+                    yn = raw_input((u"%s%s 아래에 '%s' 폴더를 생성하겠습니까? (Y/n) " % (subpath, os.path.sep, new_folder)).encode(fs_encoding)).strip()
                     print
                     if yn.lower() != 'n':
                         os.makedirs(os.path.join(subpath, new_folder))
                         path_resolved = True
                     break
 
-        if not os.path.exists(folder_name):
+        if not os.path.exists(fullpath):
             yn = raw_input((u"'%s' 폴더가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) " % folder_name).encode(fs_encoding)).strip()
             print
             if yn.lower() != 'n':
-                os.makedirs(os.path.join(base_directory, folder_name))
+                os.makedirs(fullpath)
                 path_resolved = True
 
-    return os.path.normpath(os.path.join(base_directory, folder_name))
+    return fullpath
 
 def download(current_page, cached_articles, articles, selected):
     base_directory = get_save_directory()
@@ -944,14 +945,16 @@ def download(current_page, cached_articles, articles, selected):
             a.article_num, post_date, a.title, len(a.image_list), 
             space, author)
 
-        folder_name = "[%s] %s" % (post_date.partition(' ')[0], title)
+        folder_name  = "[%s] %s" % (post_date.partition(' ')[0], title)
+	folder_name += " (#%d)" % a.article_num
         save_directory = os.path.join(base_directory, folder_name)
         if not os.path.exists(save_directory):
             os.makedirs(save_directory)
 
         print u'%s' % save_directory
+        image_count_width = len(`len(a.image_list)`)
         for j,url in enumerate(a.image_list):
-            image_index = `(j+1)`.zfill(max_image_count)
+            image_index = `(j+1)`.zfill(image_count_width)
             print u"  [%s/%d]" % (image_index, image_count),
 
             # download & filename
@@ -1090,6 +1093,7 @@ def keyboard_interrupt_handler():
             #try:
                 #yn = raw_input(u"\n종료하시겠습니까? (Y/n) ".encode(fs_encoding))
                 #if yn.lower() != "n":
+		    raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
                     sys.exit(2)
                 #continue
             #except KeyboardInterrupt:
@@ -1104,6 +1108,7 @@ def keyboard_interrupt_handler():
             print u'문제를 진단하고 해결하는데 큰 도움이 됩니다.'
             print '-' * 79
             print sys.excepthook(*sys.exc_info())
+	    raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
             sys.exit(-1)
 
 if __name__ == '__main__':
