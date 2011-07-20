@@ -610,10 +610,22 @@ def is_cafe_article_view_inner_url(url):
     return True
 
 
-def download_image_info(url):
+def download_image_and_move_to_dest(url, save_directory):
     # download to temp
     tmpfile, header = urllib.urlretrieve(url)
-    return (tmpfile, header)
+    filename = get_filename_from_header(header)
+    filename = unescape(filename)
+    print filename, u"...", 
+    sys.stdout.flush()
+
+    # move
+    result_filename = os.path.join(save_directory, filename)
+    #if os.path.exists(result_filename) and sys.platform.startswith('win32'):
+    #    os.remove(result_filename)
+
+    os.rename(tmpfile, result_filename)
+
+    return True
 
 
 #
@@ -691,6 +703,14 @@ def count_fullwidth(u):
 def print_length(title):
     ''' return width of string if printed on console '''
     return len(title) + count_hangul(title) + count_fullwidth(title)
+
+def safe_dirname(dirname):
+    ''' return safe directory under Windows, replacing special characters '''
+    invalid_characters = r'\/:*?"<>|'
+    for invalid in invalid_characters:
+        dirname = dirname.replace(invalid, '_')
+    return dirname
+
 
 
 #
@@ -946,7 +966,8 @@ def download(current_page, cached_articles, articles, selected):
             space, author)
 
         folder_name  = "[%s] %s" % (post_date.partition(' ')[0], title)
-	folder_name += " (#%d)" % a.article_num
+        folder_name += " (#%d)" % a.article_num
+        folder_name  = safe_dirname(folder_name)
         save_directory = os.path.join(base_directory, folder_name)
         if not os.path.exists(save_directory):
             os.makedirs(save_directory)
@@ -957,17 +978,21 @@ def download(current_page, cached_articles, articles, selected):
             image_index = `(j+1)`.zfill(image_count_width)
             print u"  [%s/%d]" % (image_index, image_count),
 
-            # download & filename
+            ## download & filename
             url = url.replace('daum.net/image/', 'daum.net/original/')
-            tmpfile, header = download_image_info(url)
-            filename = get_filename_from_header(header)
-            filename = unescape(filename)
-            print filename, u"...", 
-            sys.stdout.flush()
+            #tmpfile, header = download_image_info(url)
+            #filename = get_filename_from_header(header)
+            #filename = unescape(filename)
+            #print filename, u"...", 
+            #sys.stdout.flush()
 
-            # move
-            result_filename = os.path.join(save_directory, filename)
-            os.rename(tmpfile, result_filename)
+            ## move
+            #result_filename = os.path.join(save_directory, filename)
+            ##if os.path.exists(result_filename) and sys.platform.startswith('win32'):
+            ##    os.remove(result_filename)
+
+            #os.rename(tmpfile, result_filename)
+            download_image_and_move_to_dest(url, save_directory)
             print u"ok"
 
             image_downloaded_so_far += 1
