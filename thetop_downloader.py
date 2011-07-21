@@ -32,14 +32,10 @@ CLUB_ALBUM_URL = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_alb
 CLUB_ALBUM_URL_TEMPLATE = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album&page=%(page)d&prev_page=%(prev_page)d&listnum=%(listnum)d&firstbbsdepth=%(firstbbsdepth)s&lastbbsdepth=%(lastbbsdepth)s'
 
 # globals
-#opener = None
-
 fs_encoding = sys.getfilesystemencoding()
 
 
 def _open_site(url):
-    #if opener is not None:  site = opener.open(url)
-    #else:                   site = urllib.urlopen(url)
     site = urllib2.urlopen(url)
     return site
 
@@ -140,10 +136,10 @@ def authorize(retry_count=3):
         html = resp.read().decode(get_encoding_from_header(resp.headers))
         if u'<title>Daum 로그인 오류</title>' in html:
             '''
-	    	<p id="errorMsg">
-	    		입력하신 아이디 혹은 비밀번호가 일치하지 않습니다.<br />
-	    		비밀번호는 대/소문자 구분하여 입력하시기 바랍니다.
-	    	</p>
+        	<p id="errorMsg">
+        		입력하신 아이디 혹은 비밀번호가 일치하지 않습니다.<br />
+        		비밀번호는 대/소문자 구분하여 입력하시기 바랍니다.
+        	</p>
             '''
             print html                              \
                 .partition('<p id="errorMsg">')[-1] \
@@ -178,9 +174,6 @@ def list_album_board(url):
 
     # fetch board info list
     board_info_list = parse_board_info_from_sidebar(sidebar_url)
-
-    #if category:
-    #    return [t for t in board_info_list if t[0].strip() == category.strip()]
 
     return board_info_list
 
@@ -238,10 +231,10 @@ def parse_board_info_from_sidebar(url):
 
     some of examples are:
             <li class="icon_movie_all "><a id="fldlink_movie_bbs" href="/_c21_/movie_bbs_list?grpid=ccJT" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#46041;&#50689;&#49345; &#48372;&#44592;">동영상 보기</a></li>
-		    <li class="icon_board "><a id="fldlink_9VHG_286" href="/_c21_/bbs_list?grpid=ccJT&amp;fldid=9VHG" target="_parent" onclick="parent_().caller(this.href);return false;" class="" title="&#54616;&#44256;&#49910;&#51008;&#47568; &#47924;&#49832;&#47568;&#51060;&#46304; &#54624; &#49688; &#51080;&#45716; &#44277;&#44036;&#51077;&#45768;&#45796;">이런말 저런말</a></li>
-		    <li class="icon_album "><a id="fldlink_6bUe_338" href="/_c21_/album_list?grpid=ccJT&amp;fldid=6bUe" target="_parent" onclick="parent_().caller(this.href);return false;" title="climbing picture &amp; info.">Squamish</a></li>
-		    <li class="icon_phone "><a id="fldlink__album_624" href="/_c21_/album_list?grpid=ccJT&amp;fldid=_album" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#53364;&#47101;&#50536;&#48276;">클럽앨범</a></li>
-		    <li class="icon_memo "><a id="fldlink__memo_525" href="/_c21_/memo_list?grpid=ccJT&amp;fldid=_memo" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#51068;&#49345;&#51032; &#49692;&#44036;&#49692;&#44036; &#46496;&#50724;&#47476;&#45716; &#51105;&#45392;&#51060;&#45208;,&#44036;&#45800;&#54620; &#47700;&#49464;&#51648;&#47484; &#51201;&#50612;&#48372;&#49464;&#50836;!!">한 줄 메모장</a><img src="http://i1.daumcdn.net/cafeimg/cf_img2/img_blank2.gif" width="10" height="9" alt="new" class="icon_new" /></li> 
+            <li class="icon_board "><a id="fldlink_9VHG_286" href="/_c21_/bbs_list?grpid=ccJT&amp;fldid=9VHG" target="_parent" onclick="parent_().caller(this.href);return false;" class="" title="&#54616;&#44256;&#49910;&#51008;&#47568; &#47924;&#49832;&#47568;&#51060;&#46304; &#54624; &#49688; &#51080;&#45716; &#44277;&#44036;&#51077;&#45768;&#45796;">이런말 저런말</a></li>
+            <li class="icon_album "><a id="fldlink_6bUe_338" href="/_c21_/album_list?grpid=ccJT&amp;fldid=6bUe" target="_parent" onclick="parent_().caller(this.href);return false;" title="climbing picture &amp; info.">Squamish</a></li>
+            <li class="icon_phone "><a id="fldlink__album_624" href="/_c21_/album_list?grpid=ccJT&amp;fldid=_album" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#53364;&#47101;&#50536;&#48276;">클럽앨범</a></li>
+            <li class="icon_memo "><a id="fldlink__memo_525" href="/_c21_/memo_list?grpid=ccJT&amp;fldid=_memo" target="_parent" onclick="parent_().caller(this.href);return false;" title="&#51068;&#49345;&#51032; &#49692;&#44036;&#49692;&#44036; &#46496;&#50724;&#47476;&#45716; &#51105;&#45392;&#51060;&#45208;,&#44036;&#45800;&#54620; &#47700;&#49464;&#51648;&#47484; &#51201;&#50612;&#48372;&#49464;&#50836;!!">한 줄 메모장</a><img src="http://i1.daumcdn.net/cafeimg/cf_img2/img_blank2.gif" width="10" height="9" alt="new" class="icon_new" /></li> 
     '''
     _type = namedtuple('BoardInfo', 'category id path title content url'.split())
 
@@ -866,20 +859,11 @@ def list_selected_articles(current_page, cached_articles, articles, selected):
     if len(selected) == 0:
         print u"선택한 게시물이 없습니다."
     else:
-        #max_title_length = max(print_length(a.title)    for a in articles)
-        #max_image_count  = max(len(`len(a.image_list)`) for a in articles)
-
         for a in resolve_selected_articles(current_page, cached_articles, articles, selected):
             if a.url not in selected:
                 continue
 
             print format_article(a, True)
-
-            #post_date = a.post_date.replace('. ', ' ')
-            #image_count = len(a.image_list)
-            #author = a.author.partition('(')[0]
-            #space = ''.ljust(max_title_length + max_image_count - print_length(a.title) - len(`image_count`))
-            #print "* %d) %s | %s [%d] %s- %s" % (a.article_num, post_date, a.title, image_count, space, author)
 
     raw_input(u"[엔터를 누르세요] ".encode(fs_encoding))
     print
@@ -994,11 +978,8 @@ def get_save_directory():
                     break
 
         if not os.path.exists(fullpath):
-            #yn = raw_input((u"'%s' 폴더가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) " % folder_name).encode(fs_encoding)).strip()
-            #print
-            #if yn.lower() != 'n':
-                os.makedirs(fullpath)
-                path_resolved = True
+            os.makedirs(fullpath)
+            path_resolved = True
 
     return fullpath
 
@@ -1036,20 +1017,8 @@ def download(current_page, cached_articles, articles, selected):
             image_index = `(j+1)`.zfill(image_count_width)
             print u"  [%s/%d]" % (image_index, image_count),
 
-            ## download & filename
+            # download & filename
             url = url.replace('daum.net/image/', 'daum.net/original/')
-            #tmpfile, header = download_image_info(url)
-            #filename = get_filename_from_header(header)
-            #filename = unescape(filename)
-            #print filename, u"...", 
-            #sys.stdout.flush()
-
-            ## move
-            #result_filename = os.path.join(save_directory, filename)
-            ##if os.path.exists(result_filename) and sys.platform.startswith('win32'):
-            ##    os.remove(result_filename)
-
-            #os.rename(tmpfile, result_filename)
             download_image_and_move_to_dest(url, save_directory)
             print u"ok"
 
@@ -1122,77 +1091,25 @@ def fetching_articles(current_page, articles_in_page, current_cafeapp_ui):
 
     return articles_iter
 
-#def install_signal_handler():
-#    ''' install SIGINT '''
-#    def sigint_handler(signum, frame):
-#        sys.exit(signum)
-#    signal.signal(signal.SIGINT, sigint_handler)
-
-
-#class GeneratorContextManager(object):
-#    def __init__(self, gen):
-#        self.gen = gen
-#
-#    def __enter__(self):
-#        try:
-#            return self.gen.next()
-#        except StopIteration:
-#            raise RuntimeError("generator didn't yield")
-#
-#    def __exit__(self, type, value, traceback):
-#        if type is None:
-#            try:
-#                self.gen.next()
-#            except StopIteration:
-#                return
-#            else:
-#                raise RuntimeError("generator didn't stop")
-#        else:
-#            if value is None:
-#                value = type()
-#            try:
-#                self.gen.throw(type, value, traceback)
-#                #raise RuntimeError("generator didn't stop after throw()")
-#            except StopIteration, exc:
-#                return exc is not value
-#            except:
-#                if sys.exc_info()[1] is not value:
-#                    raise
-#
-#from functools import wraps
-#def contextmanager(func):
-#    @wraps(func)
-#    def helper(*args, **kwds):
-#        return GeneratorContextManager(func(*args, **kwds))
-#    return helper
-
 @contextmanager
 def keyboard_interrupt_handler():
-    #while True:
-        try:
-            yield
-            #break
-        except KeyboardInterrupt:
-            #try:
-                #yn = raw_input(u"\n종료하시겠습니까? (Y/n) ".encode(fs_encoding))
-                #if yn.lower() != "n":
-		    raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
-                    sys.exit(2)
-                #continue
-            #except KeyboardInterrupt:
-            #    sys.exit(2)
-        except:
-            print
-            print
-            print u'어익후!'
-            print u'에러가 나서 프로그램이 종료해야 합니다. 미처 고려하지 못한 부분이 있었나보네요.' 
-            print u'현상이 반복되면 아래 내용을 복사해서 메일로 보내주세요.'
-            print u' ->', __author__ 
-            print u'문제를 진단하고 해결하는데 큰 도움이 됩니다.'
-            print '-' * 79
-            print sys.excepthook(*sys.exc_info())
-	    raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
-            sys.exit(-1)
+    try:
+        yield
+    except KeyboardInterrupt:
+        raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
+        sys.exit(2)
+    except:
+        print
+        print
+        print u'어익후!'
+        print u'에러가 나서 프로그램이 종료해야 합니다. 미처 고려하지 못한 부분이 있었나보네요.' 
+        print u'현상이 반복되면 아래 내용을 복사해서 메일로 보내주세요.'
+        print u' ->', __author__ 
+        print u'문제를 진단하고 해결하는데 큰 도움이 됩니다.'
+        print '-' * 79
+        print sys.excepthook(*sys.exc_info())
+        raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
+        sys.exit(-1)
 
 if __name__ == '__main__':
     with keyboard_interrupt_handler():
@@ -1266,3 +1183,5 @@ if __name__ == '__main__':
 
         print
 
+
+# vim: sts=4 et 
