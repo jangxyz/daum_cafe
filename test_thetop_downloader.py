@@ -66,6 +66,14 @@ class SafeDirnameTestCase(unittest.TestCase):
         for invalid, valid in dirnames.items():
             assert thetop_downloader.safe_dirname(invalid) == valid, "'%s' != '%s'" % (invalid, valid)
 
+class WindowSpecificTestCase(unittest.TestCase):
+    pass
+
+
+class NetworkTimeoutTestCase(unittest.TestCase):
+    ''' scenario: timeout called twice, ok on third try '''
+    pass
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -610,21 +610,79 @@ def is_cafe_article_view_inner_url(url):
     return True
 
 
+def urlretrieve(url, response):
+    ''' download to temp file. mostly copied from urllib.py '''
+    # tmp filename
+    import tempfile
+    path   = urllib2.urlparse.urlsplit(url).path
+    suffix = os.path.splitext(path)[1]
+    (fd, tmp_filename) = tempfile.mkstemp(suffix)
+
+    # write
+    headers = response.headers.dict
+    tmpfile = os.fdopen(fd, 'wb')
+    try:
+        block_size = 1024*8
+        read       =  0
+        size       = -1
+        if "content-length" in headers:
+            size = int(headers["content-length"])
+        while True:
+            block = response.read(block_size)
+            if block == "":
+                break
+            read += len(block)
+            tmpfile.write(block)
+    finally:
+        tmpfile.close()
+    if size >= 0 and read < size:
+        raise urllib.ContentTooShortError("retrieval incomplete: got only %i out of %i bytes" \
+                                           % (read, size), (tmp_filename, headers))
+
+    return tmp_filename
+
+
+
 def download_image_and_move_to_dest(url, save_directory):
-    # download to temp
-    tmpfile, header = urllib.urlretrieve(url)
-    filename = get_filename_from_header(header)
+    ''' 
+        1. fetch meta (header)
+        2. download content and save to temp file
+        3. move temp file
+    '''
+    # fetch meta
+    timeouts = (30,60,120)
+    for timeout in timeouts: 
+        try:
+            response = urllib2.urlopen(url, timeout=timeout)
+            break
+        # timeout!
+        except IOError:
+            continue
+    else:
+        print "인터넷 연결이 되지 않습니다."
+        raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
+        sys.exit(110)
+
+    filename = get_filename_from_header(response.headers)
     filename = unescape(filename)
     print filename, u"...", 
     sys.stdout.flush()
 
-    # move
-    result_filename = os.path.join(save_directory, filename)
-    #if os.path.exists(result_filename) and sys.platform.startswith('win32'):
-    #    os.remove(result_filename)
+    # download to temp
+    try:
+        tmp_filename = urlretrieve(url, response)
 
-    os.rename(tmpfile, result_filename)
+        # move
+        result_filepath = os.path.join(save_directory, filename)
+        if os.path.exists(result_filepath) and sys.platform.startswith('win32'):
+            os.remove(result_filepath)
 
+        os.rename(tmp_filename, result_filepath)
+    except Exception, e:
+        if 'tmp_filename' in locals() and os.path.exists(tmp_filename):
+            os.unlink(tmp_filename)
+
+        raise e
     return True
 
 
