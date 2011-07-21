@@ -994,9 +994,9 @@ def get_save_directory():
                     break
 
         if not os.path.exists(fullpath):
-            yn = raw_input((u"'%s' 폴더가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) " % folder_name).encode(fs_encoding)).strip()
-            print
-            if yn.lower() != 'n':
+            #yn = raw_input((u"'%s' 폴더가 존재하지 않습니다. 새 폴더를 생성하겠습니까? (Y/n) " % folder_name).encode(fs_encoding)).strip()
+            #print
+            #if yn.lower() != 'n':
                 os.makedirs(fullpath)
                 path_resolved = True
 
