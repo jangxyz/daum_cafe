@@ -2,7 +2,7 @@
 # -*- coding: utf8 -*-
 
 __program__ = u"더탑 클럽앨범 다운로더"
-__version__ = 0.2
+__version__ = u"0.1.1"
 __author__  = u"김장환 janghwan@gmail.com"
 
 """
@@ -15,14 +15,14 @@ import re
 import datetime
 
 import htmlentitydefs
-import urllib, urllib2
+import urllib, urllib2, httplib, socket
+import urlparse
 import cookielib
 
 import getpass
 from collections import namedtuple, defaultdict
 
 from contextlib import contextmanager 
-#import signal
 
 CAFE_START_PAGE = 'http://cafe.daum.net/'
 LOGIN_URL = "https://logins.daum.net/accounts/login.do"
@@ -35,20 +35,164 @@ CLUB_ALBUM_URL_TEMPLATE = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&f
 fs_encoding = sys.getfilesystemencoding()
 
 
-def _open_site(url):
-    site = urllib2.urlopen(url)
-    return site
+ARTICLE_TIMEOUTS  = [15,30,60]
+DOWNLOAD_TIMEOUTS = [30,60,60,120,300]
 
-def urlopen(url):
-    site = _open_site(url)
-    text = site.read()
-    encoding = get_encoding_from_header(site.headers)
-    return text.decode(encoding)
+logfile=open('log', 'w')
+def log_elapsed(f):
+    import time
+    def decorate(*args, **kwargs):
+        start_time = time.time()
+        result = f(*args, **kwargs)
+        end_time = time.time()
+
+        # write log
+        func_name = "%s(%s, %s)" % (f.__name__, ', '.join(map(repr, args)), ', '.join(x+'='+repr(y) for x,y in kwargs.items()))
+        logfile.write("%s: %d seconds\n" % (func_name, end_time - start_time))
+
+        return result
+    return decorate
+
+
+
+#def retry_on_timeout(timeouts):
+#    ''' decorator function wrapping a function and let it retry on timeouts
+#
+#    @retry_on_timeout([30,60,120])
+#    def urlread(url):
+#        pass
+#
+#    urlread = retry_on_timeout([30,60,120])(urlread)
+#    urlread(url)
+#    '''
+#    def wrapper(target_func):
+#        ''' return a function that runs target_func several times on timeout '''
+#        def runner(*args, **kwargs):
+#            ''' runner that actualy runs the target_func several times '''
+#            for timeout in timeouts:
+#                # try..
+#                try:
+#                    return target_func(*args, **kwargs)
+#                # timeout error!
+#                except (IOError, httplib.HTTPException):
+#                    continue
+#            # failed after every try
+#            else:
+#                print "인터넷 연결이 되지 않습니다."
+#                raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
+#                sys.exit(110)
+#        return runner
+#    return wrapper
+
+
+#@log_elapsed
+def urlopen(url, timeouts=None):
+    timeouts = timeouts or [300, 300, 300] # default to wait 5 minutes 3 times
+
+    last_exception = None
+    for timeout in timeouts:
+        try:
+            # HERE
+            site = urllib2.urlopen(url, timeout=timeout)
+            return site
+        # timeout occured
+        except IOError as e:
+            last_exception = e
+            continue
+        except httplib.HTTPException as e:
+            last_exception = e
+            continue
+    # all retries failed
+    else:
+        raise last_exception
+        #print "인터넷 연결이 되지 않습니다."
+        #raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
+        #sys.exit(110)
+
+#@log_elapsed
+def urlread(url, timeouts=None):
+    ''' open url and read the context, decode it properly using its header '''
+
+    last_exception = None
+    for timeout in timeouts:
+        try:
+            site = urlopen(url, timeouts=[timeout])
+            text = site.read()
+            encoding = get_encoding_from_header(site.headers)
+            return text.decode(encoding)
+        # timeout occured
+        except IOError as e:
+            last_exception = e
+            continue
+        except httplib.HTTPException as e:
+            last_exception = e
+            continue
+    # all retries failed
+    else:
+        raise last_exception
+        #print "인터넷 연결이 되지 않습니다."
+        #raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
+        #sys.exit(110)
+
+
+#@log_elapsed
+def urlretrieve(url, response, timeouts=None):
+    ''' download to temp file. mostly copied from urllib.py '''
+    timeouts = timeouts or [300, 300, 300] # default to wait 5 minutes 3 times
+    last_exception = None
+
+    # tmp filename
+    import tempfile
+    path   = urlparse.urlsplit(url).path
+    suffix = os.path.splitext(path)[1]
+    (fd, tmp_filename) = tempfile.mkstemp(suffix)
+
+    # write
+    headers = response.headers.dict
+    tmpfile = os.fdopen(fd, 'wb')
+    try:
+        block_size = 1024*8
+        read       =  0
+        size       = -1
+        if "content-length" in headers:
+            size = int(headers["content-length"])
+        while True:
+
+            for timeout in timeouts:
+                # download block
+                try:
+                    block = response.read(block_size)
+                    break
+                # timeout
+                except IOError as e:
+                    last_exception = e
+                    continue
+                except httplib.HTTPException as e:
+                    last_exception = e
+                    continue
+            # all retries failed
+            else:
+                raise last_exception
+
+
+            if block == "":
+                break
+            read += len(block)
+            tmpfile.write(block)
+    finally:
+        tmpfile.close()
+    if size >= 0 and read < size:
+        raise urllib.ContentTooShortError("retrieval incomplete: got only %i out of %i bytes" \
+                                           % (read, size), (tmp_filename, headers))
+
+    return tmp_filename
+
+
 
 def get_encoding_from_header(header=None, url=None):
     ''' either header or url must be provided '''
     if header is None:
-        site = _open_site(url)
+        site = urlopen(url, timeouts=ARTICLE_TIMEOUTS)
         header = site.headers
     ct = header.dict['content-type'].strip()
     param = ct.split(';', 1)[1].strip()
@@ -58,7 +202,7 @@ def get_encoding_from_header(header=None, url=None):
 def get_filename_from_header(header=None, url=None):
     ''' either header or url must be provided '''
     if header is None:
-        site = _open_site(url)
+        site = urlopen(url, timeouts=ARTICLE_TIMEOUTS)
         header = site.headers
     try:
         cd = header.dict['content-disposition'].strip()
@@ -68,22 +212,11 @@ def get_filename_from_header(header=None, url=None):
     except:
         raise Exception("parse error")
 
-def get_filename_from_header2(url):
-    site = _open_site(url)
-    header = site.headers
-    try:
-        cd = header.dict['content-disposition'].strip()
-        param = cd.split(';', 1)[1].strip()
-        filename = param.partition('filename=')[2].strip('"')
-        return filename, site
-    except:
-        raise Exception("parse error")
-
 def is_logged_in(text=None):
     if text is None:
         LOGIN_TEST_URL = CAFE_START_PAGE
         try:
-            text = urlopen(LOGIN_TEST_URL)
+            text = urlread(LOGIN_TEST_URL, timeouts=ARTICLE_TIMEOUTS)
         except urllib2.URLError, e:
             sys.stderr.write(str(e))
             sys.stderr.write("\n")
@@ -130,10 +263,23 @@ def authorize(retry_count=3):
         #   
         cj = cookielib.CookieJar()
         opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
-        resp = opener.open(LOGIN_URL, data=urllib.urlencode(login_data))
+        for timeout in ARTICLE_TIMEOUTS:
+            try:
+                resp = opener.open(LOGIN_URL, data=urllib.urlencode(login_data))
+                html = resp.read().decode(get_encoding_from_header(resp.headers))
+                break
+            # timeout
+            except (IOError, httplib.HTTPException):
+                continue
+        # every try failed
+        else:
+            print
+            print "인터넷 연결이 되지 않습니다. 문제를 해결한 후에 다시 시도해주세요."
+            print
+            sys.exit(110)
+
 
         # login fail
-        html = resp.read().decode(get_encoding_from_header(resp.headers))
         if u'<title>Daum 로그인 오류</title>' in html:
             '''
         	<p id="errorMsg">
@@ -163,7 +309,7 @@ def list_album_board(url):
         (category, id, path, title, content, url)
     '''
     # fetch inner url
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if parse_result.netloc == 'cafe.daum.net':
         inner_url = parse_cafe_inner_url_from_official(url)
     else:
@@ -192,7 +338,7 @@ def parse_cafe_inner_url_from_official(url):
         [^>]*>
     ''', re.S | re.X)
 
-    site1 = urlopen(url)
+    site1 = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     match = CAFE_HOME_PATTERN.search(site1)
     if not match:
         raise Exception("parse error")
@@ -213,7 +359,7 @@ def parse_sidebar_menu_url_from_cafe_main(url):
         >
     ''', re.S | re.X)
 
-    text = urlopen(url)
+    text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     match = CAFE_SIDEBAR_PATTERN.search(text)
     if not match:
         raise Exception("parse error")
@@ -263,7 +409,7 @@ def parse_board_info_from_sidebar(url):
         </li>
     ''', re.X | re.S)
 
-    text = urlopen(url)
+    text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     result = BOARD_PATTERN.findall(text)
     return [_type(
             t[0].strip(), 
@@ -323,7 +469,7 @@ def parse_article_album_list(url, text=None):
 
     # fetch
     if text is None:
-        text = urlopen(url)
+        text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
 
     if not(ARTICLE_LIST_START_MARK in text and ARTICLE_LIST_END_MARK in text):
         raise Exception("parse error")
@@ -381,7 +527,7 @@ def parse_article_album_view(url):
     _type = namedtuple('DetailArticleInfo', 'article_num title post_date author url image_list'.split())
 
     # inner url
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if parse_result.netloc == 'cafe.daum.net':
         url = parse_cafe_inner_url_from_official(url)
 
@@ -412,7 +558,7 @@ def parse_article_album_view(url):
         </div>
     ''', re.X | re.S)
 
-    text = urlopen(url)
+    text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     match = ARTICLE_PATTERN.search(text)
     if not match:
         raise Exception("parse error")
@@ -471,7 +617,7 @@ def is_cafe_main_url(url):
     ... or is_cafe_main_url("http://cafe.daum.net/loveclimb/bbs_list")
     False
     '''
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if parse_result.netloc != "cafe.daum.net":
         return False
 
@@ -504,7 +650,7 @@ def is_cafe_article_list_url(url):
     '''
     NETLOC_PATTERN = re.compile("^cafe[0-9]+[.]daum[.]net$")
 
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if not NETLOC_PATTERN.match(parse_result.netloc):
         return False
 
@@ -548,7 +694,7 @@ def is_cafe_article_view_official_url(url):
     ... or is_cafe_article_view_official_url("http://cafe.daum.net/loveclimb/abc/temp/123")
     False
     '''
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if parse_result.netloc != "cafe.daum.net":
         return False
 
@@ -582,7 +728,7 @@ def is_cafe_article_view_inner_url(url):
     '''
     NETLOC_PATTERN = re.compile("^cafe[0-9]+[.]daum[.]net$")
 
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if not NETLOC_PATTERN.match(parse_result.netloc):
         return False
 
@@ -603,38 +749,6 @@ def is_cafe_article_view_inner_url(url):
     return True
 
 
-def urlretrieve(url, response):
-    ''' download to temp file. mostly copied from urllib.py '''
-    # tmp filename
-    import tempfile
-    path   = urllib2.urlparse.urlsplit(url).path
-    suffix = os.path.splitext(path)[1]
-    (fd, tmp_filename) = tempfile.mkstemp(suffix)
-
-    # write
-    headers = response.headers.dict
-    tmpfile = os.fdopen(fd, 'wb')
-    try:
-        block_size = 1024*8
-        read       =  0
-        size       = -1
-        if "content-length" in headers:
-            size = int(headers["content-length"])
-        while True:
-            block = response.read(block_size)
-            if block == "":
-                break
-            read += len(block)
-            tmpfile.write(block)
-    finally:
-        tmpfile.close()
-    if size >= 0 and read < size:
-        raise urllib.ContentTooShortError("retrieval incomplete: got only %i out of %i bytes" \
-                                           % (read, size), (tmp_filename, headers))
-
-    return tmp_filename
-
-
 
 def download_image_and_move_to_dest(url, save_directory):
     ''' 
@@ -643,18 +757,25 @@ def download_image_and_move_to_dest(url, save_directory):
         3. move temp file
     '''
     # fetch meta
-    timeouts = (30,60,120)
-    for timeout in timeouts: 
-        try:
-            response = urllib2.urlopen(url, timeout=timeout)
-            break
-        # timeout!
-        except IOError:
-            continue
-    else:
-        print "인터넷 연결이 되지 않습니다."
-        raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
-        sys.exit(110)
+    #timeouts = (30,60,120)
+    #for timeout in timeouts: 
+    #    try:
+    #        response = urllib2.urlopen(url, timeout=timeout)
+    #        break
+    #    # timeout!
+    #    except IOError:
+    #        continue
+    #else:
+    #    print "인터넷 연결이 되지 않습니다."
+    #    raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
+    #    sys.exit(110)
+    try:
+        response = urlopen(url, timeouts=DOWNLOAD_TIMEOUTS)
+    except (IOError, httplib.HTTPException):
+        print
+        print "인터넷 연결이 원활하지 않아 다운로드가 완료되지 못했습니다."
+        print
+        return False
 
     filename = get_filename_from_header(response.headers)
     filename = unescape(filename)
@@ -663,7 +784,7 @@ def download_image_and_move_to_dest(url, save_directory):
 
     # download to temp
     try:
-        tmp_filename = urlretrieve(url, response)
+        tmp_filename = urlretrieve(url, response, timeouts=DOWNLOAD_TIMEOUTS)
 
         # move
         result_filepath = os.path.join(save_directory, filename)
@@ -671,11 +792,18 @@ def download_image_and_move_to_dest(url, save_directory):
             os.remove(result_filepath)
 
         os.rename(tmp_filename, result_filepath)
-    except Exception, e:
+    except (IOError, httplib.HTTPException):
+        print
+        print "인터넷 연결이 원활하지 않아 다운로드가 완료되지 못했습니다."
+        print
         if 'tmp_filename' in locals() and os.path.exists(tmp_filename):
             os.unlink(tmp_filename)
+        return False
+    except Exception as e:
+        if 'tmp_filename' in locals() and os.path.exists(tmp_filename):
+            os.unlink(tmp_filename)
+        return False
 
-        raise e
     return True
 
 
@@ -687,7 +815,7 @@ def get_domain(url, path=None):
         urlparse:
             <scheme>://<netloc>/<path>;<params>?<query>#<fragment>
     '''
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     domain = '''%(scheme)s://%(netloc)s''' % parse_result._asdict()
     domain = domain.rstrip('/')
 
@@ -1001,7 +1129,7 @@ def download(current_page, cached_articles, articles, selected):
         space = ''.ljust(max_title_length + max_image_count - print_length(title) - len(`image_count`))
         print u"(%d/%d) %d) %s | %s [%d] %s- %s" % (
             i+1, len(selected_articles),
-            a.article_num, post_date, a.title, len(a.image_list), 
+            a.article_num, post_date, title, len(a.image_list), 
             space, author)
 
         folder_name  = "[%s] %s" % (post_date.partition(' ')[0], title)
@@ -1019,7 +1147,24 @@ def download(current_page, cached_articles, articles, selected):
 
             # download & filename
             url = url.replace('daum.net/image/', 'daum.net/original/')
-            download_image_and_move_to_dest(url, save_directory)
+            success = download_image_and_move_to_dest(url, save_directory)
+
+            # critical failure while downloading.
+            if not success:
+                print u"%d번째 글 '%s'을 다운로드 받는 도중 문제가 생겼습니다." % (i+1, title)
+                print u"이 글을 포함하여 나머지 %d개의 글은 다운로드하지 못했습니다." % (len(selected_articles)-i)
+                print u"문제가 해결되고 다시 시도해보세요."
+                if i > 0:
+                    print u"다운 완료된 글 목록:"
+                    for success_article in selected_articles[:i]:
+                        print u" * %s: %d 개", (success_article.title.strip(), len(success_article.image_list))
+                        selected.remove(success_article)
+                else:
+                    print u"다운 완료된 글 없음"
+                print
+                raw_input(u"[엔터를 누르세요] ".encode(fs_encoding))
+                return
+
             print u"ok"
 
             image_downloaded_so_far += 1
@@ -1051,6 +1196,7 @@ def user_input(current_page, selected_count):
         print u'입력(enter는 다운로드) >',
     return raw_input()
 
+
 def get_album_url(new_page=1, articles_in_page=15, current_cafeapp_ui={}):
     # http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album&page=2&prev_page=1&firstbbsdepth=0014zzzzzzzzzzzzzzzzzzzzzzzzzz&lastbbsdepth=0014kzzzzzzzzzzzzzzzzzzzzzzzzz&albumtype=article&listnum=15
     # http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&fldid=_album&page=2&prev_page=1&listnum=15
@@ -1077,19 +1223,24 @@ def fetching_articles(current_page, articles_in_page, current_cafeapp_ui):
     if current_page < 1:
         current_page = 1
 
-    album_url = get_album_url(current_page, articles_in_page, current_cafeapp_ui)
-    text = urlopen(album_url)
+    try:
+        album_url = get_album_url(current_page, articles_in_page, current_cafeapp_ui)
+        text = urlread(album_url, timeouts=ARTICLE_TIMEOUTS)
 
-    # update cafeapp_ui
-    new_cafeapp_ui = parse_cafeapp_ui_info(text)
-    if new_cafeapp_ui:
-        current_cafeapp_ui.update(new_cafeapp_ui)
+        # update cafeapp_ui
+        new_cafeapp_ui = parse_cafeapp_ui_info(text)
+        if new_cafeapp_ui:
+            current_cafeapp_ui.update(new_cafeapp_ui)
 
-    # parse articles
-    articles_brief = parse_article_album_list(album_url, text)
-    articles_iter  = (parse_article_album_view(a.url) for a in articles_brief)
+        # parse articles
+        articles_brief = parse_article_album_list(album_url, text)
+        articles_iter  = (parse_article_album_view(a.url) for a in articles_brief)
+        return articles_iter
 
-    return articles_iter
+    except (IOError, httplib.HTTPException):
+        print u"\n[오류] 인터넷 연결이 되지 않습니다. 문제를 해결한 후에 다시 시도해주세요.\n"
+        return None
+
 
 @contextmanager
 def keyboard_interrupt_handler():
@@ -1130,7 +1281,11 @@ if __name__ == '__main__':
 
         #
         articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
-        selected  = set()
+        if articles is None:
+            raw_input(u"\n[프로그램을 종료합니다]".encode(fs_encoding))
+            sys.exit(110)
+
+        selected = set()
 
         while True:
             articles = list_page(current_page, *(articles, selected))
@@ -1155,6 +1310,8 @@ if __name__ == '__main__':
                     articles = cached_articles[current_page]
                 else:
                     articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
+                    if articles is None:
+                        continue
             # reload
             elif resp == 'l':
                 # reset settings
@@ -1162,7 +1319,11 @@ if __name__ == '__main__':
                 articles_in_page = 15
                 cached_articles.clear()
                 current_cafeapp_ui = {}
+
                 articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
+                if articles is None:
+                    continue
+
             # list selected
             elif resp == 's':
                 list_selected_articles(current_page, cached_articles, *context)
