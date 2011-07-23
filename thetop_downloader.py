@@ -2,7 +2,7 @@
 # -*- coding: utf8 -*-
 
 __program__ = u"더탑 클럽앨범 다운로더"
-__version__ = u"0.1.1"
+__version__ = u"0.2"
 __author__  = u"김장환 janghwan@gmail.com"
 
 """
@@ -38,20 +38,20 @@ fs_encoding = sys.getfilesystemencoding()
 ARTICLE_TIMEOUTS  = [15,30,60]
 DOWNLOAD_TIMEOUTS = [30,60,60,120,300]
 
-logfile=open('log', 'w')
-def log_elapsed(f):
-    import time
-    def decorate(*args, **kwargs):
-        start_time = time.time()
-        result = f(*args, **kwargs)
-        end_time = time.time()
-
-        # write log
-        func_name = "%s(%s, %s)" % (f.__name__, ', '.join(map(repr, args)), ', '.join(x+'='+repr(y) for x,y in kwargs.items()))
-        logfile.write("%s: %d seconds\n" % (func_name, end_time - start_time))
-
-        return result
-    return decorate
+#logfile=open('log', 'w')
+#def log_elapsed(f):
+#    import time
+#    def decorate(*args, **kwargs):
+#        start_time = time.time()
+#        result = f(*args, **kwargs)
+#        end_time = time.time()
+#
+#        # write log
+#        func_name = "%s(%s, %s)" % (f.__name__, ', '.join(map(repr, args)), ', '.join(x+'='+repr(y) for x,y in kwargs.items()))
+#        logfile.write("%s: %d seconds\n" % (func_name, end_time - start_time))
+#
+#        return result
+#    return decorate
 
 
 
