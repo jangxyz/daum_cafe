@@ -2,7 +2,7 @@
 # -*- coding: utf8 -*-
 
 __program__ = u"더탑 클럽앨범 다운로더"
-__version__ = u"0.1.1"
+__version__ = u"0.2"
 __author__  = u"김장환 janghwan@gmail.com"
 
 """
