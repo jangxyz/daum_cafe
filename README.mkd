@@ -10,4 +10,3 @@ HTML을 직접 파싱하기 때문에 daum 측의 변경에 매우 취약합니�
  * network_util.py    : 네트워크 관련한 유틸리티입니다.
 
 완전히 동작하는 예제는 [*thetop_downloader* branch](https://github.com/jangxyz/daum_cafe/tree/thetop_downloader)를 참고하세요. 
-
