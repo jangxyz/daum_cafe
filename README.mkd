@@ -1,0 +1,14 @@
+Daum Cafe - TheTop club album downloader
+========================================
+
+**thetop_downloader** branch는 [daum_cafe](https://github.com/jangxyz/daum_cafe)를 이용하여 만든 완전한 어플리케이션입니다.
+
+정해진 단 하나의 게시판 URL에 접근하여 게시물의 목록을 읽어오고,  
+게시물에 있는 이미지들을 한번에 다운로드 받도록 하는 프로그램입니다.
+제가 개인적으로 활동하고 있는 [다음 카페](http://cafe.daum.net/loveclimb "스포츠클라이밍 실내암벽 더탑")에서 사용하기 위해 제작했습니다.
+
+thetop_downloader.py 내부에 있는 [CLUB_ALBUM_URL](https://github.com/jangxyz/daum_cafe/blob/thetop_downloader/thetop_downloader.py#L31)을 다른 카페의 앨범 게시판 url로 변경하면 사용할 수 있습니다. (슬프게도 daum 카페의 페이지가 겹겹히 쌓여 있어서 해당 게시판의 url을 찾는 것이 쉽지는 않네요. 행운을 빕니다)
+
+ * thetop_downloader.py : 메인 프로그램
+ * winpaths.py : 윈도우에서 특정 폴더 위치(바탕화면)를 찾기 위해 사용합니다.
+
