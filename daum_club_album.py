@@ -15,15 +15,14 @@ __version__ = 0.1
 __author__ = u"김장환 janghwan@gmail.com"
 
 import sys
-
 from collections import defaultdict
+fs_encoding = sys.getfilesystemencoding()
 
 # globals
 logged_in_username = None
 current_cafe  = None
 current_board = None
 
-fs_encoding = sys.getfilesystemencoding()
 
 
 #
@@ -201,8 +200,18 @@ if __name__ == '__main__':
     print_breadcrumb()
 
     # login
-    print "로그인을 해주세요:"
-    authorize()
+    try:
+        print "로그인을 해주세요:"
+        authorize()
+    except ValueError:
+        print u'도저히 로그인이 안되네요. 다음에 해보시죠.'
+        sys.exit(1)
+    except (IOError, httplib.HTTPException):
+        print
+        print u"인터넷 연결이 되지 않습니다. 문제를 해결한 후에 다시 시도해주세요."
+        print
+        sys.exit(110)
+
 
     if len(sys.argv) == 1:
         # choose cafe

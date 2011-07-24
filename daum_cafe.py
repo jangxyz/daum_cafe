@@ -4,6 +4,9 @@
 from network_util import *
 
 """
+    다음 카페 분석기
+
+        다음 카페 클럽앨범의 사진을 다운로드 받을 수 있도록 하는 스크립트
 
 """
 import sys
@@ -12,17 +15,23 @@ import re
 
 import getpass
 import cookielib
-import urllib, urllib2
+import urllib, urllib2, urlparse
 from collections import namedtuple
 
 CAFE_START_PAGE = 'http://cafe.daum.net/'
 LOGIN_URL = "https://logins.daum.net/accounts/login.do"
 
+
+def fetch(f):
+    return f
+
+
+@fetch
 def is_logged_in(text=None):
     if text is None:
         LOGIN_TEST_URL = CAFE_START_PAGE
         try:
-            text = urlopen(LOGIN_TEST_URL)
+            text = urlread(LOGIN_TEST_URL, timeouts=ARTICLE_TIMEOUTS)
         except urllib2.URLError, e:
             sys.stderr.write(str(e))
             sys.stderr.write("\n")
@@ -42,44 +51,86 @@ def is_logged_in(text=None):
     sys.stderr.write("obscure state..")
     return
         
+@fetch
+def authorize(retry_count=3):
+    ''' authorize to daum cafe
 
-def authorize(username=None, password=None):
+    raises 
+     * IOError or httplib.HTTPError on network fail
+     * ValueError on login fail
+
+    form in login page looks like the this:
+        <form name="loginform" id="loginForm" method="post" action="https://logins.daum.net/accounts/login.do">
+            <input type="hidden" name="url" id="url" value="http://cafe.daum.net" />
+            <input type="radio" name="securityLevel" id="securityLevel1" value="1" />
+            <input type="radio" name="securityLevel" id="securityLevel2" value="2" />
+            <input type="radio" name="securityLevel" id="securityLevel3" value="3" />
+            <input type="text" name="id" id="id" maxlength="50" class="empty" value="" title="아이디 입력" tabindex="1" />
+            <input type="password" name="pw" id="inputPwd" maxlength="32" class="empty" value="" title="비밀번호 입력" tabindex="2" />
+            <input type="checkbox" name="saved_id" id="sid" title="아이디 저장" tabindex="3" /><label for="sid">ID 저장</label>
+        </form>
     '''
-    <form name="loginform" id="loginForm" method="post" action="https://logins.daum.net/accounts/login.do">
-        <input type="hidden" name="url" id="url" value="http://cafe.daum.net" />
-        <input type="radio" name="securityLevel" id="securityLevel1" value="1" />
-        <input type="radio" name="securityLevel" id="securityLevel2" value="2" />
-        <input type="radio" name="securityLevel" id="securityLevel3" value="3" />
-        <input type="text" name="id" id="id" maxlength="50" class="empty" value="" title="아이디 입력" tabindex="1" />
-        <input type="password" name="pw" id="inputPwd" maxlength="32" class="empty" value="" title="비밀번호 입력" tabindex="2" />
-        <input type="checkbox" name="saved_id" id="sid" title="아이디 저장" tabindex="3" /><label for="sid">ID 저장</label>
-     </form>
-    '''
-    if username is None:
-        username = raw_input('Username: ')
-    if password is None:
+    for _try_count in range(retry_count):
+        username = raw_input(u'Username: ')
         password = getpass.getpass()
 
-    login_data = {
-        "url": "http://cafe.daum.net",
-        "securityLevel": "2",
-        "id": username,
-        "pw": password,
-    }
-    #   
-    cj = cookielib.CookieJar()
-    opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
-    resp = opener.open(LOGIN_URL, data=urllib.urlencode(login_data))
-    del password, login_data
+        login_data = {
+            "url": "http://cafe.daum.net",
+            "securityLevel": "2",
+            "id": username,
+            "pw": password,
+        }
+        #   
+        cj = cookielib.CookieJar()
+        opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
 
+        last_exception = None
+        for timeout in ARTICLE_TIMEOUTS:
+            try:
+                resp = opener.open(LOGIN_URL, data=urllib.urlencode(login_data))
+                html = resp.read().decode(get_encoding_from_header(resp.headers))
+                break
+            # timeout
+            except IOError as e:
+                last_exception = e
+                continue
+            except httplib.HTTPException as e:
+                last_exception = e
+                continue
+        # every try failed
+        else:
+            print
+            print u"인터넷 연결이 되지 않습니다. 문제를 해결한 후에 다시 시도해주세요."
+            print
+            raise last_exception
+
+        # login fail
+        if u'<title>Daum 로그인 오류</title>' in html:
+            '''
+            <p id="errorMsg">
+                입력하신 아이디 혹은 비밀번호가 일치하지 않습니다.<br />
+                비밀번호는 대/소문자 구분하여 입력하시기 바랍니다.
+            </p>
+            '''
+            print html                              \
+                .partition('<p id="errorMsg">')[-1] \
+                .partition('</p>')[0]               \
+                .replace('<br />', "\n")
+            continue
+
+        del password, login_data
+        break
+    else:
+        raise ValueError(u'도저히 로그인이 안되네요. 다음에 해보시죠.')
+
+    # set default opener
     urllib2.install_opener(opener)
-
     return username
 
 
+@fetch
 def list_cafe_from_favorites(text=None):
-    '''
-    return list of tuple (cafe_name, cafe_url)
+    ''' return list of tuples (cafe_name, cafe_url) from [자주가는 카페]
 
     assumes content of http://cafe.daum.net/ page in text
     start, finish: 
@@ -92,7 +143,7 @@ def list_cafe_from_favorites(text=None):
     cafe_list = []
 
     if text is None:
-        text = urlopen(CAFE_START_PAGE)
+        text = urlread(CAFE_START_PAGE)
 
     # extract region
     FAVORITES_MARK = re.compile(u'''
@@ -129,15 +180,16 @@ def list_cafe_from_favorites(text=None):
 
 
 def list_cafe_from_all():
+    ''' TBD '''
     pass
 
 
 def list_album_board(url):
-    '''
+    ''' 
         (category, id, path, title, content, url)
     '''
     # fetch inner url
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if parse_result.netloc == 'cafe.daum.net':
         inner_url = parse_cafe_inner_url_from_official(url)
     else:
@@ -154,10 +206,10 @@ def list_album_board(url):
 
     return board_info_list
 
+
+@fetch
 def parse_cafe_inner_url_from_official(url):
-    ''' parse cafe official url and return real url 
-    
-    '''
+    ''' from cafe official url, fetch the contents and find out inner url '''
     CAFE_HOME_PATTERN = re.compile(u'''
         # get src of frame#down
         <frame [^>]*
@@ -169,7 +221,7 @@ def parse_cafe_inner_url_from_official(url):
         [^>]*>
     ''', re.S | re.X)
 
-    site1 = urlopen(url)
+    site1 = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     match = CAFE_HOME_PATTERN.search(site1)
     if not match:
         raise Exception("parse error")
@@ -177,6 +229,7 @@ def parse_cafe_inner_url_from_official(url):
     return url
 
 
+@fetch
 def parse_sidebar_menu_url_from_cafe_main(url):
     ''' parse cafe main source and return url for cafe sidebar menu '''
     CAFE_SIDEBAR_PATTERN = re.compile(u'''
@@ -190,7 +243,7 @@ def parse_sidebar_menu_url_from_cafe_main(url):
         >
     ''', re.S | re.X)
 
-    text = urlopen(url)
+    text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     match = CAFE_SIDEBAR_PATTERN.search(text)
     if not match:
         raise Exception("parse error")
@@ -200,6 +253,7 @@ def parse_sidebar_menu_url_from_cafe_main(url):
     return sidebar_url
 
 
+@fetch
 def parse_board_info_from_sidebar(url):
     ''' parse cafe menu source and return list of menu information in tuple:
         (category, id, path, title, content, url)
@@ -240,7 +294,7 @@ def parse_board_info_from_sidebar(url):
         </li>
     ''', re.X | re.S)
 
-    text = urlopen(url)
+    text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     result = BOARD_PATTERN.findall(text)
     return [_type(
             t[0].strip(), 
@@ -252,6 +306,7 @@ def parse_board_info_from_sidebar(url):
         ) for t in result]
 
 
+@fetch
 def parse_article_album_list(url):
     ''' parse article album list and result list of article information as a tuple:
         (article_num, title, post_date, author, path, url)
@@ -261,7 +316,7 @@ def parse_article_album_list(url):
     ARTICLE_LIST_START_MARK = '''<div class="albumListBox">'''
     ARTICLE_LIST_END_MARK   = '''<!-- end albumListBox -->'''
 
-    text = urlopen(url)
+    text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     if not(ARTICLE_LIST_START_MARK in text and ARTICLE_LIST_END_MARK in text):
         raise Exception("parse error")
     text = text[ text.index(ARTICLE_LIST_START_MARK): text.index(ARTICLE_LIST_END_MARK) ]
@@ -311,6 +366,7 @@ def parse_article_album_list(url):
 
 
 
+@fetch
 def parse_article_album_view(url):
     ''' parse article album view and result list of article information as a tuple:
         (title, post_date, author, url, image_list)
@@ -318,7 +374,7 @@ def parse_article_album_view(url):
     _type = namedtuple('FullArticleInfo', 'title post_date author url image_list'.split())
 
     # inner url
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if parse_result.netloc == 'cafe.daum.net':
         url = parse_cafe_inner_url_from_official(url)
 
@@ -349,7 +405,7 @@ def parse_article_album_view(url):
         </div>
     ''', re.X | re.S)
 
-    text = urlopen(url)
+    text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
     match = ARTICLE_PATTERN.search(text)
     if not match:
         raise Exception("parse error")
@@ -376,8 +432,28 @@ def parse_article_album_view(url):
     )
 
 
+def download_image(url, dest=None):
+    ''' download image from given url to dest '''
+    # download to temp
+    tmpfile, header = urlretrieve(url, timeouts=DOWNLOAD_TIMEOUTS)
+    filename = get_filename_from_header(header)
+
+    # create directory
+    if dest is None:
+        dest = os.curdir
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+
+    # rename
+    result_filename = os.path.join(dest, filename)
+    os.rename(tmpfile, result_filename)
+    return result_filename
+
+
 def is_cafe_main_url(url):
-    '''
+    ''' checks if given url is url for cafe main page
+
+    such as:
         http://cafe.daum.net/masa2009
         http://cafe.daum.net/nowjang
         http://cafe.daum.net/loveclimb
@@ -393,7 +469,7 @@ def is_cafe_main_url(url):
     ... or is_cafe_main_url("http://cafe.daum.net/loveclimb/bbs_list")
     False
     '''
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if parse_result.netloc != "cafe.daum.net":
         return False
 
@@ -405,18 +481,20 @@ def is_cafe_main_url(url):
 
 
 def is_cafe_article_list_url(url):
-    '''
+    ''' checks if given url is url for cafe article list page
+
+    such as:
         http://cafe986.daum.net/_c21_/bbs_list?grpid=ccJT&fldid=FVuB
         http://cafe335.daum.net/_c21_/bbs_list?grpid=TweC&fldid=AtV9
         http://cafe430.daum.net/_c21_/bbs_list?grpid=1JnO3&fldid=8lAR
 
-    # the good
+    # good
     >>> is_cafe_article_list_url('http://cafe986.daum.net/_c21_/bbs_list?grpid=ccJT&fldid=FVuB')     \
     ... and is_cafe_article_list_url('http://cafe335.daum.net/_c21_/bbs_list?grpid=TweC&fldid=AtV9') \
     ... and is_cafe_article_list_url('http://cafe430.daum.net/_c21_/bbs_list?grpid=1JnO3&fldid=8lAR')
     True
 
-    # the bad
+    # bad
     >>> is_cafe_article_list_url("http://cafeABC.daum.net/_c21_/bbs_list?grpid=ccJT&fldid=FVuB")          \
     ... or is_cafe_article_list_url("http://cafe986.daum.net/_c00_/bbs_list?grpid=ccJT&fldid=FVuB")       \
     ... or is_cafe_article_list_url("http://cafe986.daum.net/_c21_/bbs_view?grpid=ccJT&fldid=FVuB")       \
@@ -426,7 +504,7 @@ def is_cafe_article_list_url(url):
     '''
     NETLOC_PATTERN = re.compile("^cafe[0-9]+[.]daum[.]net$")
 
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if not NETLOC_PATTERN.match(parse_result.netloc):
         return False
 
@@ -448,11 +526,16 @@ def is_cafe_article_list_url(url):
 
 
 def is_cafe_article_view_url(url):
+    ''' checks if given url is any kind of url for cafe article view page,
+    either official or inner
+    '''
     return is_cafe_article_view_official_url(url) \
         or is_cafe_article_view_inner_url(url)
 
 def is_cafe_article_view_official_url(url):
-    '''
+    ''' checks if given url is the official url for cafe article view page
+
+    such as:
         http://cafe.daum.net/loveclimb/9uox/318
         http://cafe.daum.net/loveclimb/_album/4089
         http://cafe.daum.net/nowjang/AtV9/72
@@ -470,7 +553,7 @@ def is_cafe_article_view_official_url(url):
     ... or is_cafe_article_view_official_url("http://cafe.daum.net/loveclimb/abc/temp/123")
     False
     '''
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if parse_result.netloc != "cafe.daum.net":
         return False
 
@@ -482,7 +565,9 @@ def is_cafe_article_view_official_url(url):
 
 
 def is_cafe_article_view_inner_url(url):
-    '''
+    ''' checks if given url is inner url for cafe article view page
+
+    such as:
         http://cafe335.daum.net/_c21_/bbs_read?grpid=TweC&mgrpid=&fldid=AtV9&page=1&prev_page=0&firstbbsdepth=&lastbbsdepth=zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz&contentval=00016zzzzzzzzzzzzzzzzzzzzzzzzz&datanum=68&listnum=20
         http://cafe430.daum.net/_c21_/bbs_read?grpid=1JnO3&mgrpid=&fldid=8ktU&page=1&prev_page=0&firstbbsdepth=&lastbbsdepth=zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz&contentval=0004Ozzzzzzzzzzzzzzzzzzzzzzzzz&datanum=272&listnum=20
         http://cafe986.daum.net/_c21_/movie_bbs_read?grpid=ccJT&fldid=9VHG&page=&prev_page=&firstbbsdepth=&lastbbsdepth=&contentval=000dqzzzzzzzzzzzzzzzzzzzzzzzzz&datanum=2470&edge=&listnum=
@@ -503,8 +588,7 @@ def is_cafe_article_view_inner_url(url):
     False
     '''
     NETLOC_PATTERN = re.compile("^cafe[0-9]+[.]daum[.]net$")
-
-    parse_result = urllib2.urlparse.urlparse(url)
+    parse_result = urlparse.urlparse(url)
     if not NETLOC_PATTERN.match(parse_result.netloc):
         return False
 
@@ -524,22 +608,5 @@ def is_cafe_article_view_inner_url(url):
     
     return True
 
-
-
-def download_image(url, dest=None):
-    # download to temp
-    tmpfile, header = urllib.urlretrieve(url)
-    filename = get_filename_from_header(header)
-
-    # create directory
-    if dest is None:
-        dest = os.curdir
-    if not os.path.exists(dest):
-        os.makedirs(dest)
-
-    # rename
-    result_filename = os.path.join(dest, filename)
-    os.rename(tmpfile, result_filename)
-    return result_filename
 
 # vim: sts=4 et
