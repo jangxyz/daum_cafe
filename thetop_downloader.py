@@ -13,6 +13,7 @@ import sys
 import os
 import re
 import datetime
+import time
 
 import htmlentitydefs
 import urllib, urllib2, httplib, socket
@@ -34,9 +35,27 @@ CLUB_ALBUM_URL_TEMPLATE = 'http://cafe986.daum.net/_c21_/album_list?grpid=ccJT&f
 # globals
 fs_encoding = sys.getfilesystemencoding()
 
-
+DEBUG_OUT = None
 ARTICLE_TIMEOUTS  = [15,30,60]
 DOWNLOAD_TIMEOUTS = [30,60,60,120,300]
+#PREV_URL = None
+last_item_in_page_accessed_at = None
+
+def debug(*args, **kwargs):
+    newline = kwargs.get('newline', True)
+
+    global DEBUG_OUT
+    if DEBUG_OUT:
+        DEBUG_OUT.write("[DEBUG] ")
+        DEBUG_OUT.write(datetime.datetime.ctime(datetime.datetime.now()))
+        DEBUG_OUT.write(" ")
+        for i,arg in enumerate(args):
+            #if i != 0:
+            #    DEBUG_OUT.write(" ")
+            DEBUG_OUT.write(str(arg))
+            DEBUG_OUT.write(' ')
+        if newline:
+            DEBUG_OUT.write("\n")
 
 #logfile=open('log', 'w')
 #def log_elapsed(f):
@@ -87,13 +106,26 @@ DOWNLOAD_TIMEOUTS = [30,60,60,120,300]
 
 #@log_elapsed
 def urlopen(url, timeouts=None):
+    #global PREV_URL 
+
     timeouts = timeouts or [300, 300, 300] # default to wait 5 minutes 3 times
 
     last_exception = None
     for timeout in timeouts:
         try:
             # HERE
-            site = urllib2.urlopen(url, timeout=timeout)
+            debug('GET', url)
+            # make request
+            req  = urllib2.Request(url)
+            #if PREV_URL:
+            #    req.add_header('Referer', PREV_URL)
+            debug('headers:', req.headers)
+            # send request
+            site = urllib2.urlopen(req, timeout=timeout)
+            debug(site.code)
+            #if site.code == 200:
+            #    PREV_URL = url
+
             return site
         # timeout occured
         except IOError as e:
@@ -154,8 +186,8 @@ def urlretrieve(url, response, timeouts=None):
         block_size = 1024*8
         read       =  0
         size       = -1
-        if "content-length" in headers:
-            size = int(headers["content-length"])
+        if "content-width" in headers:
+            size = int(headers["content-width"])
         while True:
 
             for timeout in timeouts:
@@ -559,6 +591,7 @@ def parse_article_album_view(url):
     ''', re.X | re.S)
 
     text = urlread(url, timeouts=ARTICLE_TIMEOUTS)
+    #time.sleep(1) # sleep 1 second
     match = ARTICLE_PATTERN.search(text)
     if not match:
         raise Exception("parse error")
@@ -584,7 +617,6 @@ def parse_article_album_view(url):
         d['url'],
         image_list
     )
-
 
 def get_article_num_from_url(url):
     if not is_cafe_article_view_url(url):
@@ -965,15 +997,33 @@ def format_article(article, selected, max_width=79):
 
     return s
 
+def hesitate(seconds):
+    seconds = max(seconds, 0)
+    width = 79 -0
+    frequency = 2 * seconds
+    for i in range(frequency):
+        sys.stdout.write("-" * (width / frequency))
+        sys.stdout.flush()
+        time.sleep(0.5)
+
+    width_so_far = (width / frequency) * frequency if frequency > 0 else 0
+    print '-' * (width - width_so_far)
+    return
 
 def list_page(current_page, articles_iter, selected=[]):
+    global last_item_in_page_accessed_at
+    if last_item_in_page_accessed_at:
+        hesitate(19 - (datetime.datetime.now() - last_item_in_page_accessed_at).seconds)
+
     print u"스포츠클라이밍 실내암벽 더탑 > 클럽앨범 > page %d" % current_page
     articles = []
 
+    # evaluate
     for a in articles_iter:
         is_selected = a.url in selected
         print format_article(a, is_selected)
         articles.append(a)
+    last_item_in_page_accessed_at = datetime.datetime.now()
     print
     return articles
 
@@ -1237,7 +1287,11 @@ def fetching_articles(current_page, articles_in_page, current_cafeapp_ui):
         articles_iter  = (parse_article_album_view(a.url) for a in articles_brief)
         return articles_iter
 
-    except (IOError, httplib.HTTPException):
+    except IOError as e:
+        print u"\n[오류] 인터넷 연결이 되지 않습니다. 문제를 해결한 후에 다시 시도해주세요.\n"
+        print e
+        return None
+    except httplib.HTTPException as e:
         print u"\n[오류] 인터넷 연결이 되지 않습니다. 문제를 해결한 후에 다시 시도해주세요.\n"
         return None
 
@@ -1263,6 +1317,12 @@ def keyboard_interrupt_handler():
         sys.exit(-1)
 
 if __name__ == '__main__':
+    for arg in sys.argv:
+        if arg == '--debug':
+            DEBUG_OUT = sys.stdout
+        elif arg == '--log':
+            DEBUG_OUT = open('log', 'a')
+
     with keyboard_interrupt_handler():
         intro()
         print
@@ -1288,6 +1348,7 @@ if __name__ == '__main__':
         selected = set()
 
         while True:
+            # print page
             articles = list_page(current_page, *(articles, selected))
 
             # udpate context
