@@ -40,6 +40,7 @@ ARTICLE_TIMEOUTS  = [15,30,60]
 DOWNLOAD_TIMEOUTS = [30,60,60,120,300]
 #PREV_URL = None
 last_item_in_page_accessed_at = None
+should_i_hesitate = False
 
 def debug(*args, **kwargs):
     newline = kwargs.get('newline', True)
@@ -1010,21 +1011,33 @@ def hesitate(seconds):
     print '-' * (width - width_so_far)
     return
 
+def should_hesitate():
+    global should_i_hesitate
+    return should_i_hesitate
+
+def mark_hesitate():
+    global should_i_hesitate
+    should_i_hesitate = True
+
+def unmark_hesitate():
+    global should_i_hesitate
+    should_i_hesitate = False
+
 def list_page(current_page, articles_iter, selected=[]):
     global last_item_in_page_accessed_at
-    if last_item_in_page_accessed_at:
+    if last_item_in_page_accessed_at and should_hesitate():
         hesitate(19 - (datetime.datetime.now() - last_item_in_page_accessed_at).seconds)
 
-    print u"스포츠클라이밍 실내암벽 더탑 > 클럽앨범 > page %d" % current_page
     articles = []
-
+    print u"스포츠클라이밍 실내암벽 더탑 > 클럽앨범 > page %d" % current_page
     # evaluate
     for a in articles_iter:
-        is_selected = a.url in selected
-        print format_article(a, is_selected)
+        print format_article(a, a.url in selected)
         articles.append(a)
-    last_item_in_page_accessed_at = datetime.datetime.now()
     print
+
+    last_item_in_page_accessed_at = datetime.datetime.now()
+    unmark_hesitate()
     return articles
 
 def list_selected_articles(current_page, cached_articles, articles, selected):
@@ -1285,6 +1298,10 @@ def fetching_articles(current_page, articles_in_page, current_cafeapp_ui):
         # parse articles
         articles_brief = parse_article_album_list(album_url, text)
         articles_iter  = (parse_article_album_view(a.url) for a in articles_brief)
+
+        #
+        mark_hesitate()
+
         return articles_iter
 
     except IOError as e:
@@ -1368,6 +1385,7 @@ if __name__ == '__main__':
                 else:           current_page += 1
 
                 if current_page in cached_articles:
+                    # cache
                     articles = cached_articles[current_page]
                 else:
                     articles = fetching_articles(current_page, articles_in_page, current_cafeapp_ui)
